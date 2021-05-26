@@ -20,6 +20,10 @@
 #include "esp_system.h"
 #include "driver/gpio.h"
 
+// Should match with your epaper module, size
+// CalEPD try: Works but it really needs to be implemented in test il3820.c not here: 
+//#include <gdew0583t7.h>
+
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
 #include "lvgl.h"
@@ -49,6 +53,11 @@
 #define TAG "demo"
 #define LV_TICK_PERIOD_MS 1
 
+
+extern "C"
+{
+    void app_main();
+}
 /**********************
  *  STATIC PROTOTYPES
  **********************/
@@ -59,6 +68,7 @@ static void create_demo_application(void);
 /**********************
  *   APPLICATION MAIN
  **********************/
+
 void app_main() {
 
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
@@ -82,12 +92,12 @@ static void guiTask(void *pvParameter) {
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
 
-    lv_color_t* buf1 = heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf1 != NULL);
 
     /* Use double buffered when not working with monochrome displays */
 #ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    lv_color_t* buf2 = heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf2 != NULL);
 #else
     static lv_color_t *buf2 = NULL;
