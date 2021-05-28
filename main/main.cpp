@@ -33,7 +33,7 @@
 
 #include "lvgl_helpers.h"
 
-#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
+//#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
         #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
@@ -45,7 +45,7 @@
     #else
         #error "No demo application selected."
     #endif
-#endif
+//#endif
 
 /*********************
  *      DEFINES
@@ -70,7 +70,7 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-
+    printf("app_main started\n");
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -109,6 +109,7 @@ static void guiTask(void *pvParameter) {
 
 #if defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_IL3820         \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_JD79653A    \
+    || defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER    \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_UC8151D     \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_SSD1306
 
@@ -130,8 +131,11 @@ static void guiTask(void *pvParameter) {
 #ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     disp_drv.rounder_cb = disp_driver_rounder;
     disp_drv.set_px_cb = disp_driver_set_px;
+#elif CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
+    disp_drv.rounder_cb = disp_driver_rounder;
+    disp_drv.set_px_cb = disp_driver_set_px;
 #endif
-
+    
     disp_drv.buffer = &disp_buf;
     lv_disp_drv_register(&disp_drv);
 
