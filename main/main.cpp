@@ -96,9 +96,14 @@ static void guiTask(void *pvParameter) {
     assert(buf1 != NULL);
 
     /* Use double buffered when not working with monochrome displays */
+    // Do not use double buffer for epaper
 #ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
+    #ifndef CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
     lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf2 != NULL);
+    #else
+    static lv_color_t *buf2 = NULL;
+    #endif 
 #else
     static lv_color_t *buf2 = NULL;
 #endif
@@ -132,7 +137,6 @@ static void guiTask(void *pvParameter) {
     disp_drv.rounder_cb = disp_driver_rounder;
     disp_drv.set_px_cb = disp_driver_set_px;
 #elif CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
-    disp_drv.rounder_cb = disp_driver_rounder;
     disp_drv.set_px_cb = disp_driver_set_px;
 #endif
     
