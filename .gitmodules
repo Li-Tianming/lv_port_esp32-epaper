@@ -14,3 +14,6 @@
 [submodule "components/epd_driver"]
 	path = components/epd_driver
 	url = https://github.com/martinberlin/epdiy-rotation.git
+[submodule "components/lvgl_epaper_drivers"]
+	path = components/lvgl_epaper_drivers
+	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
