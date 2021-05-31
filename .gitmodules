@@ -2,9 +2,6 @@
 	path = components/lv_examples/lv_examples
 	url = https://github.com/littlevgl/lv_examples.git
 	branch = release/v7
-[submodule "components/lvgl_esp32_drivers"]
-	path = components/lvgl_esp32_drivers
-	url = https://github.com/lvgl/lvgl_esp32_drivers.git
 [submodule "components/lvgl"]
 	path = components/lvgl
 	url = https://github.com/lvgl/lvgl.git
@@ -14,3 +11,9 @@
 [submodule "components/Adafruit-GFX"]
 	path = components/Adafruit-GFX
 	url = https://github.com/martinberlin/Adafruit-GFX-Library-ESP-IDF
+[submodule "components/epd_driver"]
+	path = components/epd_driver
+	url = https://github.com/martinberlin/epdiy-rotation.git
+[submodule "components/lvgl_epaper_drivers"]
+	path = components/lvgl_epaper_drivers
+	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
