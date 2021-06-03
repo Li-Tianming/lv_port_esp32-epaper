@@ -35,7 +35,9 @@
 
 //#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
+        // Uncomment to add full widgets demo:
         #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
+        #include "lv_examples/src/lv_epaper_demo/lv_epaper_demo.h"
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
         #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
     #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
@@ -98,7 +100,7 @@ static void guiTask(void *pvParameter) {
     /* Use double buffered when not working with monochrome displays */
     // Do not use double buffer for epaper
 #ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    #ifndef CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
+    #ifndef CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER || CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER
     lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf2 != NULL);
     #else
@@ -115,6 +117,7 @@ static void guiTask(void *pvParameter) {
 #if defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_IL3820         \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_JD79653A    \
     || defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER    \
+    || defined CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER    \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_UC8151D     \
     || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_SSD1306
 
@@ -136,7 +139,7 @@ static void guiTask(void *pvParameter) {
 #ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     disp_drv.rounder_cb = disp_driver_rounder;
     disp_drv.set_px_cb = disp_driver_set_px;
-#elif CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
+#elif CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER || CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER
     disp_drv.set_px_cb = disp_driver_set_px;
 #endif
     
@@ -209,6 +212,7 @@ static void create_demo_application(void)
 
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
         lv_demo_widgets();
+        //lv_demo_epaper();
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
         lv_demo_keypad_encoder();
     #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
