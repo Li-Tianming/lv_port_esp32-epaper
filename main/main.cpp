@@ -35,9 +35,8 @@
 
 //#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        // Uncomment to add full widgets demo:
         #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
-        #include "lv_examples/src/lv_epaper_demo/lv_epaper_demo.h"
+        // Leave a new define to make only epaper demos
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
         #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
     #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
@@ -212,7 +211,7 @@ static void create_demo_application(void)
 
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
         lv_demo_widgets();
-        //lv_demo_epaper();
+    
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
         lv_demo_keypad_encoder();
     #elif defined CONFIG_LV_USE_DEMO_BENCHMARK

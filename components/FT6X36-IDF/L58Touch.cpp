@@ -3,6 +3,8 @@
 // Note: Rotation is only working for certain angles (0 works alright, 2 also) Others still need to be corrected
 #include "L58Touch.h"
 
+#define CONFIG_L58_DEBUG 0
+
 L58Touch *L58Touch::_instance = nullptr;
 static const char *TAG = "i2c-touch";
 
@@ -72,7 +74,7 @@ bool L58Touch::begin(uint16_t width, uint16_t height)
 void L58Touch::registerTouchHandler(void (*fn)(TPoint point, TEvent e))
 {
 	_touchHandler = fn;
-	if (CONFIG_FT6X36_DEBUG) printf("Touch handler function registered\n");
+	if (CONFIG_L58_DEBUG) printf("Touch handler function registered\n");
 }
 
 TPoint L58Touch::loop()
@@ -258,7 +260,7 @@ uint8_t L58Touch::readRegister8(uint8_t reg, uint8_t *data_buf)
     esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
 
-#if defined(FT6X36_DEBUG) && FT6X36_DEBUG==1
+#if defined(CONFIG_L58_DEBUG) && FT6X36_DEBUG==1
 	printf("REG 0x%x: 0x%x\n",reg,ret);
 #endif
 
