@@ -116,7 +116,7 @@ static void guiTask(void *pvParameter) {
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         /* Try to take the semaphore, call lvgl related function on success */
         if (pdTRUE == xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
@@ -134,43 +134,29 @@ static void guiTask(void *pvParameter) {
  *  STATIC VARIABLES
  **********************/
 static lv_obj_t * tv;
-static lv_obj_t * t1;
-static lv_obj_t * t2;
-static lv_obj_t * t3;
 
-static lv_style_t style_box;
 
 // Create this global since we will access from a callback function
 lv_obj_t * ta1;
+lv_obj_t * btn;
+uint8_t btn_size = 1;
+lv_obj_t * label;
 
 static void btn_sleep_cb(lv_obj_t * obj, lv_event_t e)
 {
-    printf("Sleep! click x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
-    lv_textarea_set_text(ta1, "SLEEP\n");
-    //esp_deep_sleep_start();
+    printf("SLEEP x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+    esp_deep_sleep_start();
 }
 
-static void btn2_cb(lv_obj_t * obj, lv_event_t e)
+static void btn_cb(lv_obj_t * obj, lv_event_t e)
 {
-    const char  * txt = "Click\n";
-        static uint16_t i = 0;
-        if(txt[i] != '\0') {
-            lv_textarea_add_char(ta1, txt[i]);
-            i++;
-        }
-    printf("button click x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+    printf("click x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+
+    btn_size = (btn_size == 1) ? 2 : 1;
+    //lv_obj_set_pos(btn, 0, 100);
+    lv_obj_set_width(btn, lv_obj_get_width_grid(tv, btn_size, 1));
+    lv_label_set_text(label , (btn_size == 1) ? "BIG" : "Small");
 }
-
-static void check_cb(lv_obj_t * obj, lv_event_t event)
-{
-    const char  * txt = lv_checkbox_is_checked(obj) ? "Checked" : "Unchecked";
-    if(event == LV_EVENT_VALUE_CHANGED) {
-        printf("State: %s\n", txt);
-        lv_textarea_set_text(ta1, txt);
-    }
-}
-
-
 
 static void create_demo_application(void)
 {
@@ -178,89 +164,22 @@ static void create_demo_application(void)
     //        Also refreshing certain areas is messing the framebuffer (corrupted?)
     tv = lv_tabview_create(lv_scr_act(), NULL);
 
-    t1 = lv_tabview_add_tab(tv, "Controls");
-    t2 = lv_tabview_add_tab(tv, "Buttons");
-    t3 = lv_tabview_add_tab(tv, "Checkbox");
 
-    lv_obj_set_event_cb(t2, btn2_cb);
-    lv_obj_set_event_cb(t3, btn2_cb);
-
-
-    lv_style_init(&style_box);
-    lv_style_set_value_align(&style_box, LV_STATE_DEFAULT, LV_ALIGN_OUT_TOP_LEFT);
-    lv_style_set_value_ofs_y(&style_box, LV_STATE_DEFAULT, - LV_DPX(30));
-    lv_style_set_margin_top(&style_box, LV_STATE_DEFAULT, LV_DPX(30));
-
-    lv_page_set_scrl_layout(t1, LV_LAYOUT_PRETTY_TOP);
-
-    lv_disp_size_t disp_size = lv_disp_get_size_category(NULL);
-    lv_coord_t grid_w = lv_page_get_width_grid(t1, disp_size <= LV_DISP_SIZE_SMALL ? 1 : 2, 1);
-
-    lv_obj_t * h = lv_cont_create(t1, NULL);
-    lv_cont_set_layout(h, LV_LAYOUT_PRETTY_MID);
-    lv_obj_add_style(h, LV_CONT_PART_MAIN, &style_box);
-    lv_obj_set_drag_parent(h, true);
-
-    lv_obj_set_style_local_value_str(h, LV_CONT_PART_MAIN, LV_STATE_DEFAULT, "Basics");
-
-    lv_cont_set_fit2(h, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(h, grid_w);
-    lv_obj_t * btn = lv_btn_create(h, NULL);
+    btn = lv_btn_create(tv, NULL);
+    // Printing this button 10 pixel y down, refreshed it again to 0,0 in the pixel callback. Why?
+    lv_obj_set_pos(btn, 0, 10);
     lv_btn_set_fit2(btn, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(btn, lv_obj_get_width_grid(h, disp_size <= LV_DISP_SIZE_SMALL ? 1 : 2, 1));
-    lv_obj_t * label = lv_label_create(btn, NULL);
-    lv_label_set_text(label ,"SLEEP");
-    lv_obj_set_event_cb(btn, btn_sleep_cb);
-
-    btn = lv_btn_create(h, btn);
-    lv_btn_toggle(btn);
+    lv_obj_set_width(btn, lv_obj_get_width_grid(tv, 2, 1));
     label = lv_label_create(btn, NULL);
-    lv_label_set_text(label ,"Button 2");
+    lv_label_set_text(label, "Small");
+    lv_obj_set_event_cb(btn, btn_cb);
 
-    ta1 = lv_textarea_create(t1, NULL);
-    lv_obj_set_size(ta1, 200, 100);
-    lv_obj_align(ta1, NULL, LV_ALIGN_CENTER, 0, 0);
-    lv_textarea_set_text(ta1, "text");
-
-    //lv_switch_create(h, NULL);
-    //lv_checkbox_create(h, NULL);
-
-    // Create simple button in Tab 2: Buttons
-    lv_page_set_scrl_layout(t2, LV_LAYOUT_PRETTY_TOP);
-    lv_obj_t * h2 = lv_cont_create(t2, NULL);
-    lv_cont_set_layout(h2, LV_LAYOUT_PRETTY_MID);
-    lv_obj_add_style(h2, LV_CONT_PART_MAIN, &style_box);
-    lv_obj_set_drag_parent(h2, true);
-
-    lv_cont_set_fit2(h2, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(h2, grid_w);
-    lv_obj_t * btn2 = lv_btn_create(h2, NULL);
-    lv_btn_set_fit2(btn2, LV_FIT_NONE, LV_FIT_NONE);
-    lv_obj_set_width(btn2, lv_obj_get_width_grid(h2, 2, 1));
-    lv_obj_t * label2 = lv_label_create(btn2, NULL);
-    lv_label_set_text(label2 ,"Button Test long");
-    lv_obj_set_event_cb(btn2, btn2_cb);
-    
-    // Create simple Checkbox in Tab 3
-    lv_page_set_scrl_layout(t3, LV_LAYOUT_PRETTY_TOP);
-    lv_obj_t * h3 = lv_cont_create(t3, NULL);
-    lv_cont_set_layout(h3, LV_LAYOUT_PRETTY_MID);
-    lv_obj_add_style(h3, LV_CONT_PART_MAIN, &style_box);
-    lv_obj_set_drag_parent(h3, true);
-
-    lv_cont_set_fit2(h3, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(h3, grid_w);
-    lv_obj_t * btn3 = lv_btn_create(h3, NULL);
-    lv_btn_set_fit2(btn3, LV_FIT_NONE, LV_FIT_NONE);
-    lv_obj_set_width(btn3, lv_obj_get_width_grid(h3, 2, 1));
-    lv_obj_t * label3 = lv_label_create(btn3, NULL);
-    lv_label_set_text(label3 ,"Button 3");
-
-    // Trying to uncheck the box does not refresh the right part of the screen
-    lv_obj_t * cb = lv_checkbox_create(h3, NULL);
-    lv_checkbox_set_state(cb, true);
-    lv_checkbox_set_text(cb, "I do not agree with all this Terms");
-    lv_obj_set_event_cb(cb, check_cb);
+/* lv_obj_t * btnS = lv_btn_create(tv, NULL);
+    lv_btn_set_fit2(btnS, LV_FIT_NONE, LV_FIT_TIGHT);
+    lv_obj_set_width(btnS, lv_obj_get_width_grid(tv, 2, 1));
+    label = lv_label_create(btnS, NULL);
+    lv_label_set_text(label, "SLEEP");
+    lv_obj_set_event_cb(btnS, btn_sleep_cb); */
 }
 
 static void lv_tick_task(void *arg) {
