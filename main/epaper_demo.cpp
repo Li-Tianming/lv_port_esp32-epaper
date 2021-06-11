@@ -8,11 +8,12 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_freertos_hooks.h"
 #include "freertos/semphr.h"
+#include "esp_freertos_hooks.h"
+#include "esp_sleep.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
-#include "esp_sleep.h"
+
 // LVGL
 #include "lvgl/lvgl.h"
 #include "lvgl_helpers.h"
@@ -22,7 +23,6 @@
  *********************/
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 1
-
 
 extern "C"
 {
@@ -35,12 +35,66 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
+#define TOUCH_INT_GPIO 13
 /**********************
  *   APPLICATION MAIN
  **********************/
 
 void app_main() {
-    printf("app_main started\n");
+    printf("app_main started. Setting up touch awake \n");
+   
+   // Does never triggers
+   switch (esp_sleep_get_wakeup_cause()) {
+        case ESP_SLEEP_WAKEUP_EXT1: {
+            /* uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+            if (wakeup_pin_mask != 0) {
+                int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+                printf("Wake up from GPIO %d\n", pin);
+            } else {
+                printf("Wake up from GPIO\n");
+            } */
+            printf("Wake up from ESP_SLEEP_WAKEUP_EXT1\n");
+            break;
+        }
+
+        case ESP_SLEEP_WAKEUP_GPIO: {
+            /* uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
+            if (wakeup_pin_mask != 0) {
+                int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+                printf("Wake up from GPIO %d\n", pin);
+            } else {
+                printf("Wake up from GPIO\n");
+            } */
+            printf("Wake up from ESP_SLEEP_WAKEUP_GPIO\n");
+            break;
+        }
+
+        case ESP_SLEEP_WAKEUP_TIMER: {
+            printf("Wake up from timer.\n");
+            //printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
+            break;
+        }
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+        case ESP_SLEEP_WAKEUP_ALL:
+        case ESP_SLEEP_WAKEUP_EXT0:
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        case ESP_SLEEP_WAKEUP_ULP:
+        case ESP_SLEEP_WAKEUP_UART:
+        case ESP_SLEEP_WAKEUP_WIFI:
+        case ESP_SLEEP_WAKEUP_COCPU:
+        case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
+        case ESP_SLEEP_WAKEUP_BT:
+        break;
+   }
+
+    esp_err_t ext1wake = esp_sleep_enable_ext1_wakeup(0x2000, ESP_EXT1_WAKEUP_ALL_LOW);
+    esp_err_t ext1enable = esp_sleep_enable_gpio_wakeup();
+    // Enable timed wakeup
+    const int wakeup_time_sec = 20;
+    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+
+    printf("ext1wake:%d ext1enable:%d\n", ext1wake, ext1enable);
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -138,9 +192,9 @@ static lv_obj_t * tv;
 
 // Create this global since we will access from a callback function
 lv_obj_t * ta1;
-lv_obj_t * btn;
+
 uint8_t btn_size = 1;
-lv_obj_t * label;
+lv_obj_t * label;lv_obj_t * label2;lv_obj_t * label3;
 
 static void btn_sleep_cb(lv_obj_t * obj, lv_event_t e)
 {
@@ -154,8 +208,31 @@ static void btn_cb(lv_obj_t * obj, lv_event_t e)
 
     btn_size = (btn_size == 1) ? 2 : 1;
     //lv_obj_set_pos(btn, 0, 100);
-    lv_obj_set_width(btn, lv_obj_get_width_grid(tv, btn_size, 1));
+    lv_obj_set_width(obj, lv_obj_get_width_grid(tv, btn_size, 1));
     lv_label_set_text(label , (btn_size == 1) ? "BIG" : "Small");
+}
+static void btn2_cb(lv_obj_t * obj, lv_event_t e)
+{
+    printf("click2 x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+
+    btn_size = (btn_size == 1) ? 2 : 1;
+    lv_obj_set_pos(obj, 0, obj->coords.y1+10);
+}
+
+static void btn3_cb(lv_obj_t * obj, lv_event_t e)
+{
+    printf("click3 SLEEP x:%d y%d ",obj->coords.x1,obj->coords.y1);
+
+    obj->coords.y1 = obj->coords.y1 +10;
+    lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1);
+    
+   
+    lv_label_set_text(label3 , "SLEEP");
+    
+    vTaskDelay(1000);
+
+    //esp_light_sleep_start();
+    esp_deep_sleep_start();
 }
 
 static void create_demo_application(void)
@@ -165,7 +242,7 @@ static void create_demo_application(void)
     tv = lv_tabview_create(lv_scr_act(), NULL);
 
 
-    btn = lv_btn_create(tv, NULL);
+    lv_obj_t *btn = lv_btn_create(tv, NULL);
     // Printing this button 10 pixel y down, refreshed it again to 0,0 in the pixel callback. Why?
     lv_obj_set_pos(btn, 0, 10);
     lv_btn_set_fit2(btn, LV_FIT_NONE, LV_FIT_TIGHT);
@@ -173,6 +250,22 @@ static void create_demo_application(void)
     label = lv_label_create(btn, NULL);
     lv_label_set_text(label, "Small");
     lv_obj_set_event_cb(btn, btn_cb);
+
+    lv_obj_t *btn2 = lv_btn_create(tv, NULL);
+    lv_obj_set_pos(btn2, 0, 60);
+    lv_btn_set_fit2(btn2, LV_FIT_NONE, LV_FIT_TIGHT);
+    lv_obj_set_width(btn2, lv_obj_get_width_grid(tv, 2, 1));
+    label2 = lv_label_create(btn2, NULL);
+    lv_label_set_text(label2, "BUTTON 2");
+    lv_obj_set_event_cb(btn2, btn2_cb);
+
+    lv_obj_t *btn3 = lv_btn_create(tv, NULL);
+    lv_obj_set_pos(btn3, 490, 110);
+    lv_btn_set_fit2(btn3, LV_FIT_NONE, LV_FIT_TIGHT);
+    lv_obj_set_width(btn3, lv_obj_get_width_grid(tv, 2, 1));
+    label3 = lv_label_create(btn3, NULL);
+    lv_label_set_text(label3, "[ SLEEP ]");
+    lv_obj_set_event_cb(btn3, btn3_cb);
 
 /* lv_obj_t * btnS = lv_btn_create(tv, NULL);
     lv_btn_set_fit2(btnS, LV_FIT_NONE, LV_FIT_TIGHT);
