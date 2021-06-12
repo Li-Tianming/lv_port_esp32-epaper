@@ -41,7 +41,7 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-    printf("app_main started. Setting up touch awake \n");
+    printf("app_main started. DISP_BUF_SIZE:%d\n", DISP_BUF_SIZE);
    
    // Does never triggers
    switch (esp_sleep_get_wakeup_cause()) {
@@ -140,7 +140,7 @@ static void guiTask(void *pvParameter) {
 
     /* When using an epaper display we need to register these additional callbacks */
     #if defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
-      disp_drv.rounder_cb = disp_driver_rounder;
+      //disp_drv.rounder_cb = disp_driver_rounder;
     #endif
     disp_drv.set_px_cb = disp_driver_set_px;
     
@@ -213,17 +213,18 @@ static void btn_cb(lv_obj_t * obj, lv_event_t e)
     lv_obj_set_width(obj, lv_obj_get_width_grid(tv, btn_size, 1));
     lv_label_set_text(label , (btn_size == 1) ? "BIG" : "Small");
 }
+
 static void btn2_cb(lv_obj_t * obj, lv_event_t e)
 {
     printf("click2 x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
 
     switch (e) {
     case LV_EVENT_PRESSED:
-        lv_obj_set_pos(obj, 0, obj->coords.y1+20);
+        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1+20);
         break;
     
     case LV_EVENT_LONG_PRESSED:
-        lv_obj_set_pos(obj, 0, obj->coords.y1-20);
+        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1-20);
         break;
     }
     
@@ -231,18 +232,26 @@ static void btn2_cb(lv_obj_t * obj, lv_event_t e)
 
 static void btn3_cb(lv_obj_t * obj, lv_event_t e)
 {
-    printf("click3 SLEEP x:%d y%d ",obj->coords.x1,obj->coords.y1);
+    printf("click3 x:%d y%d ",obj->coords.x1,obj->coords.y1);
 
-    obj->coords.y1 = obj->coords.y1 +10;
-    lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1);
+    switch (e) {
+    case LV_EVENT_PRESSED:
+        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.x1+20);
+        break;
     
-   
-    lv_label_set_text(label3 , "SLEEP");
-    
-    vTaskDelay(1000);
+    case LV_EVENT_LONG_PRESSED:
+        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.x1-20);
+        break;
+    }
 
     //esp_light_sleep_start();
-    esp_deep_sleep_start();
+    //esp_deep_sleep_start();
+}
+static void checkbox_handler(lv_obj_t * obj, lv_event_t event)
+{
+    if(event == LV_EVENT_VALUE_CHANGED) {
+        printf("State: %s\n", lv_checkbox_is_checked(obj) ? "Checked" : "Unchecked");
+    }
 }
 
 static void create_demo_application(void)
@@ -254,35 +263,37 @@ static void create_demo_application(void)
 
     lv_obj_t *btn = lv_btn_create(tv, NULL);
     // Printing this button 10 pixel y down, refreshed it again to 0,0 in the pixel callback. Why?
-    lv_obj_set_pos(btn, 0, 10);
-    lv_btn_set_fit2(btn, LV_FIT_NONE, LV_FIT_TIGHT);
+    lv_obj_set_pos(btn,  10, 20);
     lv_obj_set_width(btn, lv_obj_get_width_grid(tv, 2, 1));
     label = lv_label_create(btn, NULL);
     lv_label_set_text(label, "Small");
     lv_obj_set_event_cb(btn, btn_cb);
 
     lv_obj_t *btn2 = lv_btn_create(tv, NULL);
-    lv_obj_set_pos(btn2, 0, 60);
-    lv_btn_set_fit2(btn2, LV_FIT_NONE, LV_FIT_TIGHT);
+    lv_obj_set_pos(btn2, 480, 90);
     lv_obj_set_width(btn2, lv_obj_get_width_grid(tv, 2, 1));
     label2 = lv_label_create(btn2, NULL);
     lv_label_set_text(label2, "BUTTON 2");
     lv_obj_set_event_cb(btn2, btn2_cb);
 
-    lv_obj_t *btn3 = lv_btn_create(tv, NULL);
-    lv_obj_set_pos(btn3, 490, 110);
-    lv_btn_set_fit2(btn3, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(btn3, lv_obj_get_width_grid(tv, 2, 1));
-    label3 = lv_label_create(btn3, NULL);
-    lv_label_set_text(label3, "[ SLEEP ]");
-    lv_obj_set_event_cb(btn3, btn3_cb);
+    lv_obj_t * cb = lv_checkbox_create(tv, NULL);
+    lv_checkbox_set_text(cb, "I do not agree.");
+    lv_obj_align(cb, NULL, LV_ALIGN_IN_TOP_LEFT, 30, 80);
+    lv_obj_set_event_cb(cb, checkbox_handler);
 
-/* lv_obj_t * btnS = lv_btn_create(tv, NULL);
-    lv_btn_set_fit2(btnS, LV_FIT_NONE, LV_FIT_TIGHT);
-    lv_obj_set_width(btnS, lv_obj_get_width_grid(tv, 2, 1));
-    label = lv_label_create(btnS, NULL);
-    lv_label_set_text(label, "SLEEP");
-    lv_obj_set_event_cb(btnS, btn_sleep_cb); */
+    /*Create a normal drop down list*/
+    lv_obj_t * ddlist = lv_dropdown_create(tv, NULL);
+    lv_dropdown_set_options(ddlist, "Apple\n"
+            "Banana\n"
+            "Orange\n"
+            "Melon\n"
+            "Grape\n"
+            "Raspberry");
+    lv_obj_align(ddlist, NULL, LV_ALIGN_IN_TOP_RIGHT, -20, 20);
+
+    /*Create a switch and apply the styles*/
+    lv_obj_t *sw1 = lv_switch_create(tv, NULL);
+    lv_obj_set_pos(sw1, 230, 80);
 }
 
 static void lv_tick_task(void *arg) {
