@@ -140,7 +140,7 @@ static void guiTask(void *pvParameter) {
 
     /* When using an epaper display we need to register these additional callbacks */
     #if defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
-    disp_drv.rounder_cb = disp_driver_rounder;
+      disp_drv.rounder_cb = disp_driver_rounder;
     #endif
     disp_drv.set_px_cb = disp_driver_set_px;
     
@@ -167,6 +167,8 @@ static void guiTask(void *pvParameter) {
 
     /* Create the demo application */
     create_demo_application();
+    /* Force screen refresh */
+    lv_refr_now(NULL);
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
@@ -215,8 +217,16 @@ static void btn2_cb(lv_obj_t * obj, lv_event_t e)
 {
     printf("click2 x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
 
-    btn_size = (btn_size == 1) ? 2 : 1;
-    lv_obj_set_pos(obj, 0, obj->coords.y1+10);
+    switch (e) {
+    case LV_EVENT_PRESSED:
+        lv_obj_set_pos(obj, 0, obj->coords.y1+20);
+        break;
+    
+    case LV_EVENT_LONG_PRESSED:
+        lv_obj_set_pos(obj, 0, obj->coords.y1-20);
+        break;
+    }
+    
 }
 
 static void btn3_cb(lv_obj_t * obj, lv_event_t e)
