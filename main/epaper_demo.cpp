@@ -41,7 +41,7 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-    printf("app_main started. DISP_BUF_SIZE:%d\n", DISP_BUF_SIZE);
+    printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
    
    // Does never triggers
    switch (esp_sleep_get_wakeup_cause()) {
@@ -87,14 +87,15 @@ void app_main() {
         break;
    }
 
-    esp_err_t ext1wake = esp_sleep_enable_ext1_wakeup(0x2000, ESP_EXT1_WAKEUP_ALL_LOW);
+    /* esp_err_t ext1wake = esp_sleep_enable_ext1_wakeup(0x2000, ESP_EXT1_WAKEUP_ALL_LOW);
     esp_err_t ext1enable = esp_sleep_enable_gpio_wakeup();
     // Enable timed wakeup
     const int wakeup_time_sec = 20;
     printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
-
+    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000); 
     printf("ext1wake:%d ext1enable:%d\n", ext1wake, ext1enable);
+    */
+
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -124,10 +125,9 @@ static void guiTask(void *pvParameter) {
     lv_color_t* buf2 = NULL;
 
     static lv_disp_buf_t disp_buf;
-    uint32_t size_in_px = DISP_BUF_SIZE;
-
     /* Actual size in pixels, not bytes. */
-    size_in_px *= 8;
+    uint32_t size_in_px = LV_HOR_RES_MAX*LV_VER_RES_MAX/3;
+    //size_in_px *= 8;
 
 
     /* Initialize the working buffer depending on the selected display.
@@ -136,14 +136,14 @@ static void guiTask(void *pvParameter) {
 
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
-    disp_drv.flush_cb = disp_driver_flush;
-
-    /* When using an epaper display we need to register these additional callbacks */
+    
+    // Rounder disabled
     #if defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
       //disp_drv.rounder_cb = disp_driver_rounder;
     #endif
+    /* When using an epaper display we need to register these additional callbacks */
+    disp_drv.flush_cb = disp_driver_flush;
     disp_drv.set_px_cb = disp_driver_set_px;
-    
     disp_drv.buffer = &disp_buf;
     lv_disp_drv_register(&disp_drv);
 
@@ -200,8 +200,13 @@ lv_obj_t * label;lv_obj_t * label2;lv_obj_t * label3;
 
 static void btn_sleep_cb(lv_obj_t * obj, lv_event_t e)
 {
-    printf("SLEEP x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+    if (lv_switch_get_state(obj)) {
+    printf("switch: ON Going to SLEEP!");
+    vTaskDelay(pdMS_TO_TICKS(500));
     esp_deep_sleep_start();
+    } else {
+        printf("switch: OFF");
+    }
 }
 
 static void btn_cb(lv_obj_t * obj, lv_event_t e)
@@ -230,23 +235,6 @@ static void btn2_cb(lv_obj_t * obj, lv_event_t e)
     
 }
 
-static void btn3_cb(lv_obj_t * obj, lv_event_t e)
-{
-    printf("click3 x:%d y%d ",obj->coords.x1,obj->coords.y1);
-
-    switch (e) {
-    case LV_EVENT_PRESSED:
-        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.x1+20);
-        break;
-    
-    case LV_EVENT_LONG_PRESSED:
-        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.x1-20);
-        break;
-    }
-
-    //esp_light_sleep_start();
-    //esp_deep_sleep_start();
-}
 static void checkbox_handler(lv_obj_t * obj, lv_event_t event)
 {
     if(event == LV_EVENT_VALUE_CHANGED) {
@@ -259,7 +247,7 @@ static void create_demo_application(void)
     // Notes: After first refresh the tabview boxes are loosing their top margin
     //        Also refreshing certain areas is messing the framebuffer (corrupted?)
     tv = lv_tabview_create(lv_scr_act(), NULL);
-
+    lv_obj_set_height(tv,560);
 
     lv_obj_t *btn = lv_btn_create(tv, NULL);
     // Printing this button 10 pixel y down, refreshed it again to 0,0 in the pixel callback. Why?
@@ -270,6 +258,8 @@ static void create_demo_application(void)
     lv_obj_set_event_cb(btn, btn_cb);
 
     lv_obj_t *btn2 = lv_btn_create(tv, NULL);
+    //             obj , x  , y -> Doing a Y more than 100 it simply get's the down part of the button out
+    //                             and prints this button end in the top left (Buf too small?)
     lv_obj_set_pos(btn2, 480, 90);
     lv_obj_set_width(btn2, lv_obj_get_width_grid(tv, 2, 1));
     label2 = lv_label_create(btn2, NULL);
@@ -294,6 +284,10 @@ static void create_demo_application(void)
     /*Create a switch and apply the styles*/
     lv_obj_t *sw1 = lv_switch_create(tv, NULL);
     lv_obj_set_pos(sw1, 230, 80);
+    lv_obj_set_event_cb(sw1, btn_sleep_cb);
+    lv_obj_t *sw_label = lv_label_create(tv, NULL);
+    lv_obj_align(sw_label, sw1, LV_LABEL_ALIGN_CENTER, 0, 28);
+    lv_label_set_text(sw_label, "SLEEP");
 }
 
 static void lv_tick_task(void *arg) {
