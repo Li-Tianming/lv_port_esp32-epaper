@@ -42,60 +42,6 @@ static void create_demo_application(void);
 
 void app_main() {
     printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
-   
-   // Does never triggers
-   switch (esp_sleep_get_wakeup_cause()) {
-        case ESP_SLEEP_WAKEUP_EXT1: {
-            /* uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-            if (wakeup_pin_mask != 0) {
-                int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-                printf("Wake up from GPIO %d\n", pin);
-            } else {
-                printf("Wake up from GPIO\n");
-            } */
-            printf("Wake up from ESP_SLEEP_WAKEUP_EXT1\n");
-            break;
-        }
-
-        case ESP_SLEEP_WAKEUP_GPIO: {
-            /* uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
-            if (wakeup_pin_mask != 0) {
-                int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-                printf("Wake up from GPIO %d\n", pin);
-            } else {
-                printf("Wake up from GPIO\n");
-            } */
-            printf("Wake up from ESP_SLEEP_WAKEUP_GPIO\n");
-            break;
-        }
-
-        case ESP_SLEEP_WAKEUP_TIMER: {
-            printf("Wake up from timer.\n");
-            //printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
-            break;
-        }
-        case ESP_SLEEP_WAKEUP_UNDEFINED:
-        case ESP_SLEEP_WAKEUP_ALL:
-        case ESP_SLEEP_WAKEUP_EXT0:
-        case ESP_SLEEP_WAKEUP_TOUCHPAD:
-        case ESP_SLEEP_WAKEUP_ULP:
-        case ESP_SLEEP_WAKEUP_UART:
-        case ESP_SLEEP_WAKEUP_WIFI:
-        case ESP_SLEEP_WAKEUP_COCPU:
-        case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
-        case ESP_SLEEP_WAKEUP_BT:
-        break;
-   }
-
-    /* esp_err_t ext1wake = esp_sleep_enable_ext1_wakeup(0x2000, ESP_EXT1_WAKEUP_ALL_LOW);
-    esp_err_t ext1enable = esp_sleep_enable_gpio_wakeup();
-    // Enable timed wakeup
-    const int wakeup_time_sec = 20;
-    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000); 
-    printf("ext1wake:%d ext1enable:%d\n", ext1wake, ext1enable);
-    */
-
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -125,8 +71,10 @@ static void guiTask(void *pvParameter) {
     lv_color_t* buf2 = NULL;
 
     static lv_disp_buf_t disp_buf;
-    /* Actual size in pixels, not bytes. */
-    uint32_t size_in_px = LV_HOR_RES_MAX*LV_VER_RES_MAX/3;
+    /* Actual size in pixels, not bytes. PLEASE NOTE:
+       This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
+    */
+    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/10);
     //size_in_px *= 8;
 
 

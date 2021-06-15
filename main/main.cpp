@@ -1,4 +1,5 @@
-/* LVGL Example project
+/* LVGL Example project. IMPORTANT: This is a complex UX contruct and renders slow on epaper
+ * Modify CMakeLists and point it to epaper_demo.cpp if you want a simple demo that renders fast
  *
  * Basic project to test LVGL on ESP32 based projects.
  *
@@ -71,7 +72,8 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-    printf("app_main started\n");
+     printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+   
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -96,33 +98,13 @@ static void guiTask(void *pvParameter) {
     lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf1 != NULL);
 
-    /* Use double buffered when not working with monochrome displays */
-    // Do not use double buffer for epaper
-#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    #ifndef CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER || CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER
-    lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
-    assert(buf2 != NULL);
-    #else
     static lv_color_t *buf2 = NULL;
-    #endif 
-#else
-    static lv_color_t *buf2 = NULL;
-#endif
 
     static lv_disp_buf_t disp_buf;
 
-    uint32_t size_in_px = DISP_BUF_SIZE;
-
-#if defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_IL3820         \
-    || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_JD79653A    \
-    || defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER    \
-    || defined CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER    \
-    || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_UC8151D     \
-    || defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_SSD1306
-
     /* Actual size in pixels, not bytes. */
-    size_in_px *= 8;
-#endif
+    // Missing 56 PX between chunks, why? + (LV_HOR_RES_MAX*56)
+    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/10);
 
     /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
@@ -165,7 +147,8 @@ static void guiTask(void *pvParameter) {
 
     /* Create the demo application */
     create_demo_application();
-
+    /* Force screen refresh */
+    lv_refr_now(NULL);
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
         vTaskDelay(pdMS_TO_TICKS(10));
