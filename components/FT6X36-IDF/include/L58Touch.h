@@ -1,6 +1,6 @@
 // This is the first experimental Touch component for the LILYGO EPD47 touch overlay
-// Controller is unknown, no tech specs are available, so far I could only implement as an ESP-IDF component the original example:
-// https://github.com/Xinyuan-LilyGO/LilyGo-EPD47
+// NOTE: As in LVGL we cannot use blocking functions this is a variation of original library here:
+//       https://github.com/martinberlin/FT6X36-IDF
 // More info about this epaper: 
 // https://github.com/martinberlin/cale-idf/wiki/Model-parallel-ED047TC1.h
 #include <stdint.h>
@@ -46,7 +46,7 @@
 
 class L58Touch
 {
-	static void IRAM_ATTR isr(void* arg);
+
 	typedef struct {
 		uint8_t id;
         uint8_t event;

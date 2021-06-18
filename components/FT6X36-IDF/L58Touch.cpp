@@ -8,9 +8,6 @@
 L58Touch *L58Touch::_instance = nullptr;
 static const char *TAG = "i2c-touch";
 
-//Handle indicating I2C is ready to read the touch
-SemaphoreHandle_t TouchSemaphore = xSemaphoreCreateBinary();
-
 L58Touch::L58Touch(int8_t intPin)
 {
 	_instance = this;
@@ -39,10 +36,10 @@ L58Touch::L58Touch(int8_t intPin)
 	_intPin = intPin;
 }
 
-// Destructor should detach interrupt to the pin
+// Destructor does nothing for now
 L58Touch::~L58Touch()
 {
-	gpio_isr_handler_remove((gpio_num_t)_intPin);
+	
 }
 
 bool L58Touch::begin(uint16_t width, uint16_t height)
@@ -61,11 +58,9 @@ bool L58Touch::begin(uint16_t width, uint16_t height)
     io_conf.pull_down_en = (gpio_pulldown_t) 0; // disable pull-down mode
     io_conf.pull_up_en   = (gpio_pullup_t) 1;   // pull-up mode
     gpio_config(&io_conf);
-	esp_err_t isr_service = gpio_install_isr_service(0);
-    printf("ISR trigger install response: 0x%x %s\n", isr_service, (isr_service==0)?"ESP_OK":"");
-    gpio_isr_handler_add((gpio_num_t)_intPin, isr, (void*) 1);
-
-	// Wake up: https://github.com/Xinyuan-LilyGO/LilyGo-EPD47/blob/master/src/touch.cpp#L123
+	/* INT gpio is not declared as an interrupt PIN in this touch version since we cannot do 
+       blocking functions in LVGL: 
+    */
 	uint8_t buf[2] = {0xD1, 0X06};
 	writeData(buf, sizeof(buf));
 	return true;
@@ -83,28 +78,20 @@ TPoint L58Touch::loop()
     return _point;
 }
 
-void IRAM_ATTR L58Touch::isr(void* arg)
-{
-	/* Un-block the interrupt processing task now */
-    xSemaphoreGive(TouchSemaphore);
-}
-
 TPoint L58Touch::processTouch()
 {
-    TPoint point_null;
-    point_null.x = 0;
-    point_null.y = 0;
-    point_null.event = 0;
-	/* Task move to Block state to wait for interrupt event */
-	if (xSemaphoreTake(TouchSemaphore, portMAX_DELAY) == false) return point_null;
-	TPoint point = scanPoint();
+    TPoint point;
+    point.x = lastX;
+    point.y = lastY;
+    point.event = lastEvent;
     
-    if (!tapDetectionEnabled) {
-        fireEvent(point, TEvent::Tap);
+	if (gpio_get_level((gpio_num_t)CONFIG_LV_TOUCH_INT) == 0) {
+	   TPoint point = scanPoint();
+       lastX = point.x;
+       lastY = point.y;
+       lastEvent = point.event;
     }
-    if (tapDetectionEnabled && _touchEndTime - _touchStartTime <= tapDetectionMillisDiff) {
-        fireEvent(point, TEvent::Tap);
-    }
+    
     return point;
 }
 
@@ -163,16 +150,10 @@ TPoint L58Touch::scanPoint()
             }
             data[i].id =  (buffer[i * 5 + offset] >> 4) & 0x0F;
             data[i].event = buffer[i * 5 + offset] & 0x0F;
-            // Todo: Pending to revise why this construction is here
-            /* if (data[i].state == 0x06) {
-                data[i].state = 0x07;
-            } else {
-                data[i].state = 0x06;
-            } */
             data[i].y = (uint16_t)((buffer[i * 5 + 1 + offset] << 4) | ((buffer[i * 5 + 3 + offset] >> 4) & 0x0F));
             data[i].x = (uint16_t)((buffer[i * 5 + 2 + offset] << 4) | (buffer[i * 5 + 3 + offset] & 0x0F));
 
-            printf("X[%d]:%d Y:%d E:%d\n", i, data[i].x, data[i].y, data[i].event);
+            //printf("X[%d]:%d Y:%d E:%d\n", i, data[i].x, data[i].y, data[i].event);
         }
 
     } else {
@@ -188,7 +169,10 @@ TPoint L58Touch::scanPoint()
         if (data[0].event == 0) { /** Lift up */
             _touchEndTime = esp_timer_get_time()/1000;
         }
-        printf("X:%d Y:%d E:%d\n", data[0].x, data[0].y, data[0].event);
+
+        #if defined(CONFIG_L58_DEBUG) && CONFIG_L58_DEBUG==1
+          printf("X:%d Y:%d E:%d\n", data[0].x, data[0].y, data[0].event);
+        #endif
 	}
      
 	uint16_t x = data[0].x;
@@ -211,7 +195,7 @@ TPoint L58Touch::scanPoint()
         x = _touch_height - x;
 		break;
 
-	case 2: // Works OK
+	case 2:
 		x = _touch_width - x;
 		break;
 
@@ -243,6 +227,7 @@ void L58Touch::writeData(uint8_t *data, int len)
     i2c_master_start(cmd);
 	i2c_master_write(cmd, data, len, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
+    i2c_cmd_link_delete(cmd);
 }
 
 uint8_t L58Touch::readRegister8(uint8_t reg, uint8_t *data_buf)
@@ -260,7 +245,7 @@ uint8_t L58Touch::readRegister8(uint8_t reg, uint8_t *data_buf)
     esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
 
-#if defined(CONFIG_L58_DEBUG) && FT6X36_DEBUG==1
+#if defined(CONFIG_L58_DEBUG) && CONFIG_L58_DEBUG==1
 	printf("REG 0x%x: 0x%x\n",reg,ret);
 #endif
 
