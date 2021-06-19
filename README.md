@@ -1,19 +1,19 @@
-# LVGL project for ESP32 epapers in develop branch
+# LVGL project for ESP32 parallel epapers
 
-This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the set_px_cb callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD).
-CalEPD is an ESP-IDF component that supports many different epapers (SPI & Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component)
-The development repository where everything is tested before landing in their own component repositories is [Cale-idf](https://github.com/martinberlin/Cale-idf).
+This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the set_px_cb callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or EPDiy (parallel)
+CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component.
+
 The demo application is the `lv_demo_widgets` project from the [lv_examples](https://github.com/lvgl/lv_examples) repository.
 
-- Version of ESP-IDF required 4.2. NOTE: We're trying to make this repo backwards compatible, usage of idf.py is encouraged.
+- Version of ESP-IDF required 4.2. NOTE: Usage of idf.py to compile/flash is encouraged.
 - Version of LVGL used: 7.9.
 - Version of lv_examples used: 7.9.
-- **Important** please use lvgl component in branch **release/v7** and this main repository in **develop** branch.
-- Comment FT touch component require in CalEPD CMakeLists and leave only EpdParalell and their related classes (parallel and comment the rest)
-- SPI epapers supported in CalEPD can be used but then VSPI should be selected in LVGL. I will leave a generic SPI driver soon.
+- **Important** please use lvgl component in branch **release/v7** and this main repository in **master** branch.
+- SPI epapers supported in CalEPD can be used but then VSPI should be selected in LVGL. There is a CalEPD driver but this fork is mainly focused on making it work with fast parallel epapers.
 
-The main idea is to use CalEPD as a component and the set_px_cb callback to draw each pixel. This will have a performance hit but it will also allow us to draw UX interfaces in different epapers, like complex 4 SPI combined displays, that are the moment are very difficult to support with LVGL as is. The plan also includes adding the epaper folder in the lvgl_esp32_drivers linked component to separate it from TFT. 
-Touch comes later and it will be better to adapt new I2C Touch drivers directly in the lvgl_esp32_drivers repository, that needs to be forked as well to add the epaper drivers.
+The main idea is to use EPDiy as a component and the set_px_cb callback to draw each pixel. This will have a performance hit but it will also allow us to draw UX interfaces in parallel epapers that are quite fast flushing partial refresh. Using CalEPD driver is only exoerimental and to test edge cases, like complex 4 SPI combined displays, that are not supported at the moment in LVGL.
+L58 Touch driver that EPD47 uses is also added using as a bridge component FT6x36. First test target is [Lilygo EPD47](https://twitter.com/martinfasani/status/1406148638351495169). This parallel epaper comes with an ESP32-WROVER and PSRAM and both epaper and touch module can be adquired for 45 u$ in Aliexpress.
+Please check [the Wiki section](https://github.com/martinberlin/lv_port_esp32-epaper/wiki) and the notes below to understand how to compile your first examples and the notes below to set up your test environments.
 
 #### Table of content
 - [Get started](#get-started)
