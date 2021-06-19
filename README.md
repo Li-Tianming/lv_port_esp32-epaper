@@ -1,6 +1,7 @@
 # LVGL project for ESP32 parallel epapers
 
 This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the set_px_cb callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or EPDiy (parallel)
+
 CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component.
 
 The demo application is the `lv_demo_widgets` project from the [lv_examples](https://github.com/lvgl/lv_examples) repository.
@@ -13,7 +14,7 @@ The demo application is the `lv_demo_widgets` project from the [lv_examples](htt
 
 The main idea is to use EPDiy as a component and the set_px_cb callback to draw each pixel. This will have a performance hit but it will also allow us to draw UX interfaces in parallel epapers that are quite fast flushing partial refresh. Using CalEPD driver is only exoerimental and to test edge cases, like complex 4 SPI combined displays, that are not supported at the moment in LVGL.
 L58 Touch driver that EPD47 uses is also added using as a bridge component FT6x36. First test target is [Lilygo EPD47](https://twitter.com/martinfasani/status/1406148638351495169). This parallel epaper comes with an ESP32-WROVER and PSRAM and both epaper and touch module can be adquired for 45 u$ in Aliexpress.
-Please check [the Wiki section](https://github.com/martinberlin/lv_port_esp32-epaper/wiki) and the notes below to understand how to compile your first examples and the notes below to set up your test environments.
+Please check [the Wiki section](https://github.com/martinberlin/lv_port_esp32-epaper/wiki) and the notes below to understand how to compile your first examples.
 
 #### Table of content
 - [Get started](#get-started)
