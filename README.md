@@ -2,10 +2,14 @@
 
 This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the **set_px_cb** callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or [EPDiy (for parallel epapers)](https://github.com/martinberlin/epdiy-rotation).
 
-CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component. So you will find in the linked repository (lvgl_epaper_drivers)[https://github.com/martinberlin/lvgl_epaper_drivers/tree/master/lvgl_tft] two drivers in the **lvgl_tft** directory:
+CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component. So you will find in the linked repository [lvgl_epaper_drivers)(https://github.com/martinberlin/lvgl_epaper_drivers/tree/master/lvgl_tft] two drivers in the **lvgl_tft** directory:
 
 - epdiy_epaper.cpp
 - calepd_epaper.cpp  (Display controller module: EPDIY_GENERIC)
+
+This drivers are automatically configured when you run **idf.py menuconfig** selecting this option:
+
+Component config -> LVGL TFT/Epaper controller -> Display controller model
 
 The demo application is the `lv_demo_widgets` project from the [lv_examples](https://github.com/lvgl/lv_examples) repository.
 
@@ -41,7 +45,7 @@ Example demo for TFT displays:
 
 ## Display and touch controllers
 
-The display and touch (indev) controllers are now into it's own repository, you can find it [here](https://github.com/lvgl/lvgl_esp32_drivers).
+The display and touch (indev) controllers are now into it's own repository, you can find it [here](https://github.com/martinberlin/lvgl_epaper_drivers).
 To report any issue or add new display or touch (indev) drivers you can do so in the `lvgl_esp32_drivers` repo.
 
 ## Get started
