@@ -1,8 +1,11 @@
 # LVGL project for ESP32 parallel epapers
 
-This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the set_px_cb callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or EPDiy (parallel)
+This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the **set_px_cb** callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or [EPDiy (for parallel epapers)](https://github.com/martinberlin/epdiy-rotation).
 
-CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component.
+CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component. So you will find in the linked repository (lvgl_epaper_drivers)[https://github.com/martinberlin/lvgl_epaper_drivers/tree/master/lvgl_tft] two drivers in the **lvgl_tft** directory:
+
+- epdiy_epaper.cpp
+- calepd_epaper.cpp  (Display controller module: EPDIY_GENERIC)
 
 The demo application is the `lv_demo_widgets` project from the [lv_examples](https://github.com/lvgl/lv_examples) repository.
 
@@ -10,11 +13,20 @@ The demo application is the `lv_demo_widgets` project from the [lv_examples](htt
 - Version of LVGL used: 7.9.
 - Version of lv_examples used: 7.9.
 - **Important** please use lvgl component in branch **release/v7** and this main repository in **master** branch.
-- SPI epapers supported in CalEPD can be used but then VSPI should be selected in LVGL. There is a CalEPD driver but this fork is mainly focused on making it work with fast parallel epapers.
+- SPI epapers supported in CalEPD can be used but then VSPI should be selected in LVGL. There is a CalEPD driver but this fork is mainly focused on making it work with fast parallel epapers supported by EPDiy component.
 
-The main idea is to use EPDiy as a component and the set_px_cb callback to draw each pixel. This will have a performance hit but it will also allow us to draw UX interfaces in parallel epapers that are quite fast flushing partial refresh. Using CalEPD driver is only exoerimental and to test edge cases, like complex 4 SPI combined displays, that are not supported at the moment in LVGL.
+The main idea is to use a bridge driver that pushes the pixels to EPDiy using the set_px_cb/flush callbacks in order to render the layouts on the supported epapers. This will have a performance hit but it will also allow us to draw UX interfaces in parallel epapers that are quite fast flushing partial refresh. Using CalEPD driver is only experimental and to test edge cases, like complex 4 SPI combined displays, that are not supported at the moment in LVGL.
 L58 Touch driver that EPD47 uses is also added using as a bridge component FT6x36. First test target is [Lilygo EPD47](https://twitter.com/martinfasani/status/1406148638351495169). This parallel epaper comes with an ESP32-WROVER and PSRAM and both epaper and touch module can be adquired for 45 u$ in Aliexpress.
 Please check [the Wiki section](https://github.com/martinberlin/lv_port_esp32-epaper/wiki) and the notes below to understand how to compile your first examples.
+
+#### Hardware required
+
+For the first's tests the Lilygo EPD47 parallel epaper with the L58 Touch overlay was used. You can find both in [Aliexpress Lilygo official store](https://lilygo.de.aliexpress.com/store/group/TTGO-E-Paper-Display/2090076_513596996.html):
+
+![epaper_200x200](https://user-images.githubusercontent.com/2692928/122663807-6e910300-d19d-11eb-9783-7640a6ddba77.png)
+
+![touch_200x200](https://user-images.githubusercontent.com/2692928/122663810-72bd2080-d19d-11eb-95da-33b9fcf9805e.png)
+
 
 #### Table of content
 - [Get started](#get-started)
@@ -139,3 +151,9 @@ Moreover, static allocation to external PSRAM is not yet supported
 (see [GitHub issue](https://github.com/espressif/esp-idf/issues/6162)).
 
 At this momement, the buffers are dynamicaly allocated with DMA capabilty and memory allocator handles the rest.
+
+## Documentation references
+
+[Display interface](https://docs.lvgl.io/latest/en/html/porting/display.html) to read about how we use the callbacks to draw in displays that are not natively supported by LVGL
+
+[Input drivers (touch)](https://docs.lvgl.io/latest/en/html/porting/indev.html)
