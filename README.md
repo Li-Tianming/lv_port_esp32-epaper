@@ -1,11 +1,11 @@
 # LVGL project for ESP32 parallel epapers
 
-This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the **set_px_cb** callback to make LVGL work with different epapers that we already support in [CalEPD component](https://github.com/martinberlin/CalEPD) or [EPDiy (for parallel epapers)](https://github.com/martinberlin/epdiy-rotation).
+This is an ESP32 fork project showcasing LVGL v7 with support for several display controllers and touch controllers. The intention is to use the **set_px_cb** callback to make LVGL work with different epapers that are already supported in [EPDiy component (for parallel epapers)](https://github.com/martinberlin/epdiy-rotation). As an experimental test also other SPI epaper displays can be used with [CalEPD component](https://github.com/martinberlin/CalEPD).
 
 CalEPD is an ESP-IDF component that supports many different SPI epapers and Paralell using [EPDiy](https://github.com/vroland/epdiy) as a bridge component. So you will find in the linked repository [lvgl_epaper_drivers](https://github.com/martinberlin/lvgl_epaper_drivers/tree/master/lvgl_tft) two drivers in the **lvgl_tft** directory:
 
-- epdiy_epaper.cpp
-- calepd_epaper.cpp  (Display controller module: EPDIY_GENERIC)
+- epdiy_epaper.cpp   (Display controller module: EPDIY_GENERIC)
+- calepd_epaper.cpp  (Experimental: lvgl_epaper_drivers component in develop branch)
 
 This drivers are automatically configured when you run **idf.py menuconfig** selecting this option:
 
