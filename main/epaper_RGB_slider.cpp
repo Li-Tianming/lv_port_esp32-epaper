@@ -3,31 +3,19 @@
  */
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
-#include "esp_freertos_hooks.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_system.h"
-#include "driver/gpio.h"
-#include "esp_sleep.h"
-// LVGL
-#include "lvgl/lvgl.h"
-#include "lvgl_helpers.h"
-// - - - - HTTP Client includes:
-#include "lwip/err.h"
-#include "lwip/sys.h"
-#include "esp_netif.h"
-#include "esp_err.h"
-#include "esp_tls.h"
-#include "esp_http_client.h"
 
+// LVGL
+#include "lvgl_helpers.h"
+#include "esp_http_client.h"
+#include "nvs_flash.h"
 /******************************************
  *      DEFINES: Add your WiFi credentials
  ******************************************/
@@ -92,39 +80,6 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
-}
-
-esp_err_t _http_event_handler(esp_http_client_event_t *evt)
-{
-    uint8_t output_buffer[HTTP_RECEIVE_BUFFER_SIZE]; // Buffer to store HTTP response
-
-    switch (evt->event_id)
-    {
-    case HTTP_EVENT_ERROR:
-        ESP_LOGE(TAG, "HTTP_EVENT_ERROR");
-        break;
-    case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
-        break;
-    case HTTP_EVENT_HEADER_SENT:
-        ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
-        break;
-    case HTTP_EVENT_ON_HEADER:
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-        break;
-    case HTTP_EVENT_ON_DATA:
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA received");
-        break;
-    case HTTP_EVENT_ON_FINISH:
-        countDataEventCalls=0;
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
-        break;
-
-    case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED\n");
-        break;
-    }
-    return ESP_OK;
 }
 
 void wifi_init_sta(void)
@@ -199,6 +154,15 @@ void wifi_init_sta(void)
 
 void app_main() {
     printf("app_main RGB Slider\n");
+    //Initialize NVS: WiFi needs this
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     // Connect to wifi
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
@@ -225,7 +189,7 @@ static void guiTask(void *pvParameter) {
     lvgl_driver_init();
     // Screen is cleaned in first flush
 
-    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     assert(buf1 != NULL);
 
     // Do not use double buffer for epaper
