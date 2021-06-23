@@ -8,21 +8,48 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_freertos_hooks.h"
+#include "freertos/event_groups.h"
 #include "freertos/semphr.h"
+#include "esp_freertos_hooks.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
 #include "esp_sleep.h"
 // LVGL
 #include "lvgl/lvgl.h"
 #include "lvgl_helpers.h"
+// - - - - HTTP Client includes:
+#include "lwip/err.h"
+#include "lwip/sys.h"
+#include "esp_netif.h"
+#include "esp_err.h"
+#include "esp_tls.h"
+#include "esp_http_client.h"
 
-/*********************
- *      DEFINES
- *********************/
+/******************************************
+ *      DEFINES: Add your WiFi credentials
+ ******************************************/
+#define CONFIG_ESP_WIFI_SSID "WLAN-724300"
+#define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
+
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 1
+#define HTTP_RECEIVE_BUFFER_SIZE 100
 
+/* FreeRTOS event group to signal when we are connected*/
+static EventGroupHandle_t s_wifi_event_group;
+
+/* The event group allows multiple bits for each event, but we only care about two events:
+ * - we are connected to the AP with an IP
+ * - we failed to connect after the maximum amount of retries */
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT BIT1
+#define CONFIG_ESP_MAXIMUM_RETRY 5
+char espIpAddress[16];
+static int s_retry_num = 0;
+uint16_t countDataEventCalls=0;
 
 extern "C"
 {
@@ -35,12 +62,147 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
+static void event_handler(void *arg, esp_event_base_t event_base,
+                          int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
+        esp_wifi_connect();
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        if (s_retry_num < CONFIG_ESP_MAXIMUM_RETRY)
+        {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "Retry to connect to the AP");
+        }
+        else
+        {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            ESP_LOGI(TAG, "Connect to the AP failed %d times. Going to deepsleep 10 minutes", CONFIG_ESP_MAXIMUM_RETRY);
+            //deepsleep();
+        }
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        sprintf(espIpAddress,  IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "got ip: %s\n", espIpAddress);
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    uint8_t output_buffer[HTTP_RECEIVE_BUFFER_SIZE]; // Buffer to store HTTP response
+
+    switch (evt->event_id)
+    {
+    case HTTP_EVENT_ERROR:
+        ESP_LOGE(TAG, "HTTP_EVENT_ERROR");
+        break;
+    case HTTP_EVENT_ON_CONNECTED:
+        ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
+        break;
+    case HTTP_EVENT_HEADER_SENT:
+        ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
+        break;
+    case HTTP_EVENT_ON_HEADER:
+        ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        break;
+    case HTTP_EVENT_ON_DATA:
+        ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA received");
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        countDataEventCalls=0;
+        ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+        break;
+
+    case HTTP_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED\n");
+        break;
+    }
+    return ESP_OK;
+}
+
+void wifi_init_sta(void)
+{
+    s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+    wifi_config_t wifi_config;
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    sprintf(reinterpret_cast<char *>(wifi_config.sta.ssid), CONFIG_ESP_WIFI_SSID);
+    sprintf(reinterpret_cast<char *>(wifi_config.sta.password), CONFIG_ESP_WIFI_PASSWORD);
+    wifi_config.sta.pmf_cfg.capable = true;
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config((wifi_interface_t)ESP_IF_WIFI_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                           pdFALSE,
+                                           pdFALSE,
+                                           portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually happened. */
+    if (bits & WIFI_CONNECTED_BIT)
+    {
+        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+                 CONFIG_ESP_WIFI_SSID, CONFIG_ESP_WIFI_PASSWORD);
+    }
+    else if (bits & WIFI_FAIL_BIT)
+    {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+                 CONFIG_ESP_WIFI_SSID, CONFIG_ESP_WIFI_PASSWORD);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    }
+
+    /* The event will not be processed after unregister */
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+    vEventGroupDelete(s_wifi_event_group);
+}
+
 /**********************
  *   APPLICATION MAIN
  **********************/
 
 void app_main() {
     printf("app_main RGB Slider\n");
+    // Connect to wifi
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    wifi_init_sta();
+
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
