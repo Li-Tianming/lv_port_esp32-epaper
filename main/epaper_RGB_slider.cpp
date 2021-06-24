@@ -17,13 +17,16 @@
 #include "esp_http_client.h"
 #include "nvs_flash.h"
 /******************************************
- *      DEFINES: Add your WiFi credentials
+ *      DEFINES: Add your WiFi credentials and MESH_LAMP_IP target
  ******************************************/
-#define CONFIG_ESP_WIFI_SSID "WLAN-724300"
+#define CONFIG_ESP_WIFI_SSID     "WLAN-724300"
 #define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
+// Here should be the IP of your root lamp. Find it with:  ping esp32_mesh.local
+#define MESH_LAMP_REQUEST_URL    "http://192.168.12.124/device_request"
+#define MESH_LAMP_NODE           "3c71bf9d6980"
 
 #define TAG "epaper"
-#define LV_TICK_PERIOD_MS 1
+#define LV_TICK_PERIOD_MS 10
 #define HTTP_RECEIVE_BUFFER_SIZE 100
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -50,7 +53,72 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
-static void event_handler(void *arg, esp_event_base_t event_base,
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch(evt->event_id) {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGI(TAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER");
+            printf("%.*s", evt->data_len, (char*)evt->data);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                printf("%.*s", evt->data_len, (char*)evt->data);
+            }
+
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+            break;
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
+            break;
+    }
+    return ESP_OK;
+}
+
+esp_err_t light_request(uint8_t cid, uint16_t value) {
+    char json_request[200];
+
+    esp_http_client_config_t config = {
+        .url = MESH_LAMP_REQUEST_URL,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 4000,
+        .event_handler = _http_event_handler,
+        .buffer_size = HTTP_RECEIVE_BUFFER_SIZE
+        };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    // Build POST   
+    sprintf(json_request, "{\"request\":\"set_status\",\"characteristics\":[{\"cid\":%d,\"value\":%d}]}",
+            cid, value);
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_header(client, "Mesh-Node-Mac", MESH_LAMP_NODE);
+    esp_http_client_set_post_field(client, json_request, strlen(json_request));
+    // Send the post request
+    esp_err_t err = esp_http_client_perform(client);
+    
+    printf("POST(%d): %s\n", strlen(json_request), json_request);
+
+    if (err == ESP_OK) {
+        // Disable after debugging
+        ESP_LOGI(TAG, "Status=%d,content_length=%d",
+                esp_http_client_get_status_code(client),
+                esp_http_client_get_content_length(client));
+    }
+    return err;
+}
+
+static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -68,8 +136,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         else
         {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            ESP_LOGI(TAG, "Connect to the AP failed %d times. Going to deepsleep 10 minutes", CONFIG_ESP_MAXIMUM_RETRY);
-            //deepsleep();
+            ESP_LOGI(TAG, "Connect to the AP failed %d times. Restart to try again", CONFIG_ESP_MAXIMUM_RETRY);
         }
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
@@ -98,12 +165,12 @@ void wifi_init_sta(void)
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
-                                                        &event_handler,
+                                                        &wifi_event_handler,
                                                         NULL,
                                                         &instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
+                                                        &wifi_event_handler,
                                                         NULL,
                                                         &instance_got_ip));
 
@@ -119,7 +186,7 @@ void wifi_init_sta(void)
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by wifi_event_handler() (see above) */
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
                                            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
                                            pdFALSE,
@@ -154,6 +221,9 @@ void wifi_init_sta(void)
 
 void app_main() {
     printf("app_main RGB Slider\n");
+    // WiFi log level
+    esp_log_level_set("wifi", ESP_LOG_ERROR);
+
     //Initialize NVS: WiFi needs this
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -274,6 +344,8 @@ static void slider_red_event_cb(lv_obj_t * slider, lv_event_t event)
         static char buf[4]; /* max 3 bytes for number plus 1 null terminating byte */
         snprintf(buf, 4, "%u", lv_slider_get_value(slider));
         lv_label_set_text(r_slider_value, buf);
+
+        light_request(1, lv_slider_get_value(slider));
     }
 }
 static void slider_green_event_cb(lv_obj_t * slider, lv_event_t event)
@@ -293,7 +365,7 @@ static void slider_blue_event_cb(lv_obj_t * slider, lv_event_t event)
     }
 }
 
-void create_slider(lv_obj_t * parent_obj, const char *label_text, lv_event_cb_t slider_event, int16_t y_ofs)
+void create_slider(lv_obj_t * parent_obj, const char *label_text, lv_event_cb_t slider_event, int16_t y_ofs, uint16_t range)
 {
   /* Create a slider in the center of the display */
     printf("Drawing %s slider y_ofs:%d\n", label_text, y_ofs);
@@ -302,11 +374,11 @@ void create_slider(lv_obj_t * parent_obj, const char *label_text, lv_event_cb_t 
     lv_obj_set_width(slider, LV_HOR_RES_MAX/2);
     lv_obj_align(slider, NULL, LV_ALIGN_CENTER, 0, y_ofs);
     lv_obj_set_event_cb(slider, slider_event);
-    lv_slider_set_range(slider, 0, 255);
+    lv_slider_set_range(slider, 0, range);
     
     /* Create a label below the slider */
     lv_obj_t * label = lv_label_create(parent_obj, NULL);
-    if (strcmp(label_text ,"RED") == 0) {
+    if (strcmp(label_text ,"HUE") == 0) {
         lv_label_set_text(label, label_text);
         lv_obj_align(label, slider, LV_ALIGN_OUT_TOP_MID, 0, y_ofs-20);
 
@@ -346,11 +418,11 @@ static void create_demo_application(void)
     lv_obj_align(info, NULL, LV_ALIGN_IN_TOP_LEFT, 10, 10);
 
     // Build UX functions to avoid repeating same code X times
-    create_slider(tv, "RED", slider_red_event_cb, 0);
+    create_slider(tv, "HUE", slider_red_event_cb, 0, 255);
     
-    create_slider(tv, "GREEN", slider_green_event_cb, 80);
+    create_slider(tv, "GREEN", slider_green_event_cb, 80, 100);
     
-    create_slider(tv, "BLUE", slider_blue_event_cb, 160);
+    create_slider(tv, "BLUE", slider_blue_event_cb, 160, 100);
 }
 
 static void lv_tick_task(void *arg) {
