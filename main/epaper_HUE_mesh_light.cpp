@@ -25,12 +25,12 @@
 #define MESH_LAMP_REQUEST_URL    "http://192.168.12.124/device_request"
 
 //Local test against a known server:
-//#define MESH_LAMP_REQUEST_URL    "http://192.168.12.106/device_request/index.php"
+//#define MESH_LAMP_REQUEST_URL   "http://192.168.12.106/device_request/index.php"
 #define MESH_LAMP_NODE           "3c71bf9d6980"
 
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 10
-#define HTTP_RECEIVE_BUFFER_SIZE 100
+#define HTTP_RECEIVE_BUFFER_SIZE 50
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -71,9 +71,10 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         case HTTP_EVENT_ON_HEADER:
             break;
         case HTTP_EVENT_ON_DATA:
+        countDataEventCalls++;
             ESP_LOGI(TAG, "ON_DATA, len=%d", evt->data_len);
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                printf("\n%.*s", evt->data_len, (char*)evt->data);
+                printf("calls:%d %.*s\n", countDataEventCalls, evt->data_len, (char*)evt->data);
             }
             break;
         case HTTP_EVENT_ON_FINISH:
@@ -86,13 +87,34 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+char *randstring(size_t length) {
+
+    static char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.-#'?!";        
+    char *randomString = NULL;
+
+    if (length) {
+        randomString = (char*)malloc(sizeof(char) * (length +1));
+
+        if (randomString) {            
+            for (int n = 0;n < length;n++) {            
+                int key = rand() % (int)(sizeof(charset) -1);
+                randomString[n] = charset[key];
+            }
+
+            randomString[length] = '\0';
+        }
+    }
+
+    return randomString;
+}
+
 esp_err_t light_request(uint8_t cid, uint16_t value) {
     char json_request[100];
 
     esp_http_client_config_t config = {
         .url = MESH_LAMP_REQUEST_URL,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 500,
+        .timeout_ms = 1500,
         .event_handler = _http_event_handler,
         .buffer_size = HTTP_RECEIVE_BUFFER_SIZE
         };
@@ -104,11 +126,16 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     
     esp_http_client_set_header(client, "Mesh-Node-Mac", "3c71bf9d6980");
     esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_header(client, "Accept", "*/*");
+    esp_http_client_set_header(client, "Connection", "keep-alive");
+    esp_http_client_set_header(client, "Randomtoken", randstring(12));
+    
     esp_http_client_set_post_field(client, json_request, strlen(json_request));
     // Send the post request
     esp_err_t err = esp_http_client_perform(client);
     
     //printf("POST(%d) %s\n", strlen(json_request), json_request);
+    //printf("H:%d\n",xPortGetFreeHeapSize()); // Check there are no memory leaks
 
     if (err == ESP_OK) {
         // Disable after debugging
@@ -118,6 +145,8 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     }else{
         ESP_LOGE(TAG, "\nPOST failed:%s", esp_err_to_name(err));
     }
+
+    esp_http_client_cleanup(client);
     return err;
 }
 
@@ -336,30 +365,31 @@ lv_obj_t * r_slider_value;
 lv_obj_t * g_slider_value;
 lv_obj_t * b_slider_value;
 
-static void slider_red_event_cb(lv_obj_t * slider, lv_event_t event)
+static void slider_hue_event_cb(lv_obj_t * slider, lv_event_t event)
 {
     if(event == LV_EVENT_VALUE_CHANGED) {
         static char buf[4]; /* max 3 bytes for number plus 1 null terminating byte */
         snprintf(buf, 4, "%u", lv_slider_get_value(slider));
         lv_label_set_text(r_slider_value, buf);
-
         light_request(1, lv_slider_get_value(slider));
     }
 }
-static void slider_green_event_cb(lv_obj_t * slider, lv_event_t event)
+static void slider_bright_event_cb(lv_obj_t * slider, lv_event_t event)
 {
     if(event == LV_EVENT_VALUE_CHANGED) {
         static char buf[4]; /* max 3 bytes for number plus 1 null terminating byte */
         snprintf(buf, 4, "%u", lv_slider_get_value(slider));
         lv_label_set_text(g_slider_value, buf);
+        light_request(3, lv_slider_get_value(slider));
     }
 }
-static void slider_blue_event_cb(lv_obj_t * slider, lv_event_t event)
+static void slider_white_event_cb(lv_obj_t * slider, lv_event_t event)
 {
     if(event == LV_EVENT_VALUE_CHANGED) {
         static char buf[4]; /* max 3 bytes for number plus 1 null terminating byte */
         snprintf(buf, 4, "%u", lv_slider_get_value(slider));
         lv_label_set_text(b_slider_value, buf);
+        light_request(5, lv_slider_get_value(slider));
     }
 }
 
@@ -416,11 +446,11 @@ static void create_demo_application(void)
     lv_obj_align(info, NULL, LV_ALIGN_IN_TOP_LEFT, 10, 10);
 
     // Build UX functions to avoid repeating same code X times
-    create_slider(tv, "HUE", slider_red_event_cb, 0, 359);
+    create_slider(tv, "HUE", slider_hue_event_cb, 0, 359);
     
-    create_slider(tv, "BRIGHT", slider_green_event_cb, 80, 100);
+    create_slider(tv, "BRIGHT", slider_bright_event_cb, 80, 100);
     
-    create_slider(tv, "WHITE", slider_blue_event_cb, 160, 100);
+    create_slider(tv, "WHITE", slider_white_event_cb, 160, 100);
 }
 
 static void lv_tick_task(void *arg) {
