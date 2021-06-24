@@ -23,6 +23,9 @@
 #define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
 // Here should be the IP of your root lamp. Find it with:  ping esp32_mesh.local
 #define MESH_LAMP_REQUEST_URL    "http://192.168.12.124/device_request"
+
+//Local test against a known server:
+//#define MESH_LAMP_REQUEST_URL    "http://192.168.12.106/device_request/index.php"
 #define MESH_LAMP_NODE           "3c71bf9d6980"
 
 #define TAG "epaper"
@@ -60,39 +63,36 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             ESP_LOGI(TAG, "HTTP_EVENT_ERROR");
             break;
         case HTTP_EVENT_ON_CONNECTED:
-            ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
+            ESP_LOGI(TAG, "EVENT_ON_CONNECTED");
             break;
         case HTTP_EVENT_HEADER_SENT:
-            ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
+            ESP_LOGI(TAG, "HEADER_SENT");
             break;
         case HTTP_EVENT_ON_HEADER:
-            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER");
-            printf("%.*s", evt->data_len, (char*)evt->data);
             break;
         case HTTP_EVENT_ON_DATA:
-            ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            ESP_LOGI(TAG, "ON_DATA, len=%d", evt->data_len);
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                printf("%.*s", evt->data_len, (char*)evt->data);
+                printf("\n%.*s", evt->data_len, (char*)evt->data);
             }
-
             break;
         case HTTP_EVENT_ON_FINISH:
-            ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+            ESP_LOGI(TAG, "ON_FINISH");
             break;
         case HTTP_EVENT_DISCONNECTED:
-            ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
+            ESP_LOGI(TAG, "DISCONNECTED");
             break;
     }
     return ESP_OK;
 }
 
 esp_err_t light_request(uint8_t cid, uint16_t value) {
-    char json_request[200];
+    char json_request[100];
 
     esp_http_client_config_t config = {
         .url = MESH_LAMP_REQUEST_URL,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 4000,
+        .timeout_ms = 500,
         .event_handler = _http_event_handler,
         .buffer_size = HTTP_RECEIVE_BUFFER_SIZE
         };
@@ -101,19 +101,22 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     // Build POST   
     sprintf(json_request, "{\"request\":\"set_status\",\"characteristics\":[{\"cid\":%d,\"value\":%d}]}",
             cid, value);
+    
+    esp_http_client_set_header(client, "Mesh-Node-Mac", "3c71bf9d6980");
     esp_http_client_set_header(client, "Content-Type", "application/json");
-    esp_http_client_set_header(client, "Mesh-Node-Mac", MESH_LAMP_NODE);
     esp_http_client_set_post_field(client, json_request, strlen(json_request));
     // Send the post request
     esp_err_t err = esp_http_client_perform(client);
     
-    printf("POST(%d): %s\n", strlen(json_request), json_request);
+    //printf("POST(%d) %s\n", strlen(json_request), json_request);
 
     if (err == ESP_OK) {
         // Disable after debugging
-        ESP_LOGI(TAG, "Status=%d,content_length=%d",
+        ESP_LOGI(TAG, "Status=%d, content_length=%d",
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
+    }else{
+        ESP_LOGE(TAG, "\nPOST failed:%s", esp_err_to_name(err));
     }
     return err;
 }
@@ -220,7 +223,8 @@ void wifi_init_sta(void)
  **********************/
 
 void app_main() {
-    printf("app_main RGB Slider\n");
+    printf("HUE slider for ESP-MDF Light\n");
+    
     // WiFi log level
     esp_log_level_set("wifi", ESP_LOG_ERROR);
 
@@ -241,6 +245,8 @@ void app_main() {
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
     xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
+
+    printf("Free heap:%d\n",xPortGetFreeHeapSize());
 }
 
 /* Creates a semaphore to handle concurrent call to lvgl stuff
@@ -266,11 +272,9 @@ static void guiTask(void *pvParameter) {
     lv_color_t* buf2 = NULL;
 
     static lv_disp_buf_t disp_buf;
-    uint32_t size_in_px = DISP_BUF_SIZE;
-
     /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
-    lv_disp_buf_init(&disp_buf, buf1, buf2, size_in_px);
+    lv_disp_buf_init(&disp_buf, buf1, buf2, DISP_BUF_SIZE);
 
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
@@ -324,15 +328,9 @@ static void guiTask(void *pvParameter) {
 
 /**********************
  *  STATIC VARIABLES
+ *  Create this global since we will access from a callback function
  **********************/
 static lv_obj_t * tv;
-
-
-// Create this global since we will access from a callback function
-lv_obj_t * ta1;
-lv_obj_t * btn;
-uint8_t btn_size = 1;
-
 lv_obj_t * slider;
 lv_obj_t * r_slider_value;
 lv_obj_t * g_slider_value;
@@ -388,7 +386,7 @@ void create_slider(lv_obj_t * parent_obj, const char *label_text, lv_event_cb_t 
         lv_obj_align(r_slider_value, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, y_ofs+10);
     }
 
-    if (strcmp(label_text ,"GREEN") == 0) {
+    if (strcmp(label_text ,"BRIGHT") == 0) {
         lv_label_set_text(label, label_text);
         lv_obj_align(label, slider, LV_ALIGN_OUT_TOP_MID, 0, -15);
 
@@ -398,7 +396,7 @@ void create_slider(lv_obj_t * parent_obj, const char *label_text, lv_event_cb_t 
         lv_obj_align(g_slider_value, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, y_ofs-70);
     }
 
-    if (strcmp(label_text ,"BLUE") == 0) {
+    if (strcmp(label_text ,"WHITE") == 0) {
         lv_label_set_text(label, label_text);
         lv_obj_align(label, slider, LV_ALIGN_OUT_TOP_MID, 0, -10);
 
@@ -418,11 +416,11 @@ static void create_demo_application(void)
     lv_obj_align(info, NULL, LV_ALIGN_IN_TOP_LEFT, 10, 10);
 
     // Build UX functions to avoid repeating same code X times
-    create_slider(tv, "HUE", slider_red_event_cb, 0, 255);
+    create_slider(tv, "HUE", slider_red_event_cb, 0, 359);
     
-    create_slider(tv, "GREEN", slider_green_event_cb, 80, 100);
+    create_slider(tv, "BRIGHT", slider_green_event_cb, 80, 100);
     
-    create_slider(tv, "BLUE", slider_blue_event_cb, 160, 100);
+    create_slider(tv, "WHITE", slider_blue_event_cb, 160, 100);
 }
 
 static void lv_tick_task(void *arg) {
