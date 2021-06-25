@@ -1,5 +1,11 @@
 /* LVGL Example project for Epaper displays
  * Just a simple layout, buttons and checkboxes
+ *
+ * PREREQUISITES:
+ * Fill out your WiFi SSID / PASSWORD below and the MESH ID of the lamp you want to control
+ * For that in the ESP-MESH mobile app, just press over a lamp and select: About device
+ * Copy that ID into the define: MESH_LAMP_NODE
+ * Alternative is to make a mesh_info query: https://docs.espressif.com/projects/esp-mdf/en/latest/api-guides/mlink.html#app-acquires-the-device-list
  */
 #include <stdbool.h>
 #include <stdio.h>
@@ -11,6 +17,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "mdns.h"
 
 // LVGL
 #include "lvgl_helpers.h"
@@ -21,13 +28,7 @@
  ******************************************/
 #define CONFIG_ESP_WIFI_SSID     "WLAN-724300"
 #define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
-// Here should be the IP of your root lamp. Find it with:  ping esp32_mesh.local
-#define MESH_LAMP_REQUEST_URL    "http://192.168.12.124/device_request"
-
-//Local test against a known server:
-//#define MESH_LAMP_REQUEST_URL   "http://192.168.12.106/device_request/index.php"
 #define MESH_LAMP_NODE           "3c71bf9d6980"
-
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 10
 #define HTTP_RECEIVE_BUFFER_SIZE 50
@@ -42,19 +43,48 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT BIT1
 #define CONFIG_ESP_MAXIMUM_RETRY 5
 char espIpAddress[16];
+// Note: If automatic MDNS detection does not work espRootLampURL has to be filled with the URL to query the lamp
+//   Ex: http://IP/device_request
+//   To  find the IP of your root lamp:  ping esp32_mesh.local
+char espRootLampURL[40];
 static int s_retry_num = 0;
-uint16_t countDataEventCalls=0;
+uint16_t countDataEventCalls = 0;
+const char * root_lamp_host = "esp32_mesh";
 
 extern "C"
 {
     void app_main();
 }
+
 /**********************
  *  STATIC PROTOTYPES
  **********************/
 static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
+
+void resolve_mdns_host(const char * host_name)
+{
+    printf("Query A: %s.local\n", host_name);
+    struct ip4_addr addr;
+    addr.addr = 0;
+
+    esp_err_t err = mdns_query_a(host_name, 2000,  (esp_ip4_addr_t*)&addr);
+
+    if(err){
+        if(err == ESP_ERR_NOT_FOUND){
+            printf("%s.local was not found.\n", host_name);
+            return;
+        }
+        printf("ERRORS ESP_ERR_INVALID_STATE:%d ESP_ERR_NO_MEM:%d ESP_ERR_INVALID_ARG:%d\n",
+            ESP_ERR_INVALID_STATE,ESP_ERR_NO_MEM,ESP_ERR_INVALID_ARG);
+        printf("MDNS Query Failed. ERR %d. Please resolve the address from your local PC with: ping %s.local\n", err, host_name);
+        return;
+    }
+    
+    sprintf(espRootLampURL, "http://"IPSTR"/device_request", IP2STR(&addr));
+    printf("Root lamp request URL: %s\n\n", espRootLampURL);
+}
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -112,7 +142,7 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     char json_request[100];
 
     esp_http_client_config_t config = {
-        .url = MESH_LAMP_REQUEST_URL,
+        .url = espRootLampURL,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 1500,
         .event_handler = _http_event_handler,
@@ -133,9 +163,8 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     esp_http_client_set_post_field(client, json_request, strlen(json_request));
     // Send the post request
     esp_err_t err = esp_http_client_perform(client);
-    
-    //printf("POST(%d) %s\n", strlen(json_request), json_request);
-    //printf("H:%d\n",xPortGetFreeHeapSize()); // Check there are no memory leaks
+    // DEBUG Post data and check there are no memory leaks
+    //printf("POST(%d) %s \nHeap:%d\n", strlen(json_request), json_request, xPortGetFreeHeapSize());
 
     if (err == ESP_OK) {
         // Disable after debugging
@@ -175,9 +204,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         sprintf(espIpAddress,  IPSTR, IP2STR(&event->ip_info.ip));
-        ESP_LOGI(TAG, "got ip: %s\n", espIpAddress);
+        ESP_LOGI(TAG, "\nGot IP: %s\n", espIpAddress);
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+        // Initialize MDNS service
+        ESP_ERROR_CHECK( mdns_init() );
+        printf("MESH root lamp query to find IP\n");
+        resolve_mdns_host(root_lamp_host);
     }
 }
 
@@ -253,7 +287,7 @@ void wifi_init_sta(void)
 
 void app_main() {
     printf("HUE slider for ESP-MDF Light\n");
-    
+
     // WiFi log level
     esp_log_level_set("wifi", ESP_LOG_ERROR);
 
