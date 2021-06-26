@@ -2,10 +2,14 @@
  * Just a simple layout, buttons and checkboxes
  *
  * PREREQUISITES:
- * Fill out your WiFi SSID / PASSWORD below and the MESH ID of the lamp you want to control
+ * Fill out your WiFi SSID / PASSWORD below and the MESH MAC address of the lamp you want to control
  * For that in the ESP-MESH mobile app, just press over a lamp and select: About device
- * Copy that ID into the define: MESH_LAMP_NODE
+ * Copy that MESH MAC address into the define: MESH_LAMP_MAC (You can add more than 1 lamp separating with commas)
  * Alternative is to make a mesh_info query: https://docs.espressif.com/projects/esp-mdf/en/latest/api-guides/mlink.html#app-acquires-the-device-list
+ *
+ * curl -v 'http://esp32_mesh.local/mesh_info'
+ * 
+ * Obvious important notice: The lights should be powered on otherwise won't respond to your requests
  */
 #include <stdbool.h>
 #include <stdio.h>
@@ -28,7 +32,7 @@
  ******************************************/
 #define CONFIG_ESP_WIFI_SSID     "WLAN-724300"
 #define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
-#define MESH_LAMP_NODE           "3c71bf9d6980"
+#define MESH_LAMP_MAC            "3c71bf9d6ab4,3c71bf9d6980"
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 10
 #define HTTP_RECEIVE_BUFFER_SIZE 50
@@ -83,7 +87,7 @@ void resolve_mdns_host(const char * host_name)
     }
     
     sprintf(espRootLampURL, "http://"IPSTR"/device_request", IP2STR(&addr));
-    printf("Root lamp request URL: %s\n\n", espRootLampURL);
+    printf("Root lamp request URL: %s\nMESH NODE to control: %s\n", espRootLampURL, MESH_LAMP_MAC);
 }
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
@@ -154,7 +158,7 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     sprintf(json_request, "{\"request\":\"set_status\",\"characteristics\":[{\"cid\":%d,\"value\":%d}]}",
             cid, value);
     
-    esp_http_client_set_header(client, "Mesh-Node-Mac", "3c71bf9d6980");
+    esp_http_client_set_header(client, "Mesh-Node-Mac", MESH_LAMP_MAC);
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_header(client, "Accept", "*/*");
     esp_http_client_set_header(client, "Connection", "keep-alive");
