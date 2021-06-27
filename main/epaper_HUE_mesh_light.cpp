@@ -32,11 +32,13 @@
  ******************************************/
 #define CONFIG_ESP_WIFI_SSID     "WLAN-724300"
 #define CONFIG_ESP_WIFI_PASSWORD "50238634630558382093"
-#define MESH_LAMP_MAC            "3c71bf9d6ab4,3c71bf9d6980"
+// Leave commented to detect MESH Mac lamps automatically. Fill to target this node(s) comma separated
+//#define MESH_LAMP_MAC            "3c71bf9d6ab4,3c71bf9d6980"
 #define TAG "epaper"
 #define LV_TICK_PERIOD_MS 10
 #define HTTP_RECEIVE_BUFFER_SIZE 50
-
+// Leave DEBUG_ENABLED on first tries
+//#define DEBUG_ENABLED
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -47,10 +49,13 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT BIT1
 #define CONFIG_ESP_MAXIMUM_RETRY 5
 char espIpAddress[16];
+char meshLampMacs[160];
+
 // Note: If automatic MDNS detection does not work espRootLampURL has to be filled with the URL to query the lamp
 //   Ex: http://IP/device_request
 //   To  find the IP of your root lamp:  ping esp32_mesh.local
 char espRootLampURL[40];
+char espRootLampMeshInfoURL[40];
 static int s_retry_num = 0;
 uint16_t countDataEventCalls = 0;
 const char * root_lamp_host = "esp32_mesh";
@@ -67,29 +72,6 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
-void resolve_mdns_host(const char * host_name)
-{
-    printf("Query A: %s.local\n", host_name);
-    struct ip4_addr addr;
-    addr.addr = 0;
-
-    esp_err_t err = mdns_query_a(host_name, 2000,  (esp_ip4_addr_t*)&addr);
-
-    if(err){
-        if(err == ESP_ERR_NOT_FOUND){
-            printf("%s.local was not found.\n", host_name);
-            return;
-        }
-        printf("ERRORS ESP_ERR_INVALID_STATE:%d ESP_ERR_NO_MEM:%d ESP_ERR_INVALID_ARG:%d\n",
-            ESP_ERR_INVALID_STATE,ESP_ERR_NO_MEM,ESP_ERR_INVALID_ARG);
-        printf("MDNS Query Failed. ERR %d. Please resolve the address from your local PC with: ping %s.local\n", err, host_name);
-        return;
-    }
-    
-    sprintf(espRootLampURL, "http://"IPSTR"/device_request", IP2STR(&addr));
-    printf("Root lamp request URL: %s\nMESH NODE to control: %s\n", espRootLampURL, MESH_LAMP_MAC);
-}
-
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch(evt->event_id) {
@@ -103,13 +85,19 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             ESP_LOGI(TAG, "HEADER_SENT");
             break;
         case HTTP_EVENT_ON_HEADER:
+            ESP_LOGI(TAG, "ON_HEADER k=%s v=%s\n", evt->header_key, evt->header_value);
+            if (strcmp(evt->header_key, "Mesh-Node-Mac") == 0) {
+                #ifndef defined MESH_LAMP_MAC
+                sprintf(meshLampMacs, "%s", evt->header_value);
+                #endif
+            }
             break;
         case HTTP_EVENT_ON_DATA:
-        countDataEventCalls++;
-            ESP_LOGI(TAG, "ON_DATA, len=%d", evt->data_len);
-            if (!esp_http_client_is_chunked_response(evt->client)) {
-                printf("calls:%d %.*s\n", countDataEventCalls, evt->data_len, (char*)evt->data);
-            }
+            countDataEventCalls++;
+            #ifdef DEBUG_ENABLED
+               ESP_LOGI(TAG, "ON_DATA, len=%d", evt->data_len);
+               printf("calls:%d %.*s\n", countDataEventCalls, evt->data_len, (char*)evt->data);
+            #endif
             break;
         case HTTP_EVENT_ON_FINISH:
             ESP_LOGI(TAG, "ON_FINISH");
@@ -119,6 +107,52 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             break;
     }
     return ESP_OK;
+}
+
+void resolve_mdns_host(const char * host_name)
+{
+    printf("Query A: %s.local\n", host_name);
+    struct ip4_addr addr;
+    addr.addr = 0;
+
+    esp_err_t err = mdns_query_a(host_name, 2000,  (esp_ip4_addr_t*)&addr);
+
+    if(err){
+        if(err == ESP_ERR_NOT_FOUND){
+            printf("%s.local was not found.\n", host_name);
+            return;
+        }
+        
+        printf("MDNS Query Failed. ERR %s. Please resolve the address from your local PC with: ping %s.local\n", esp_err_to_name(err), host_name);
+        return;
+    }
+    
+    sprintf(espRootLampURL, "http://"IPSTR"/device_request", IP2STR(&addr));
+    sprintf(espRootLampMeshInfoURL, "http://"IPSTR"/mesh_info", IP2STR(&addr));
+
+    printf("Root lamp request URL: %s\n", espRootLampURL);
+
+    #ifndef MESH_LAMP_MAC
+    printf("Root lamp requesting Nodes: %s\n", espRootLampMeshInfoURL);
+    // Query root lamp for Nodes
+    esp_http_client_config_t config = {
+        .url = espRootLampMeshInfoURL,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 2500,
+        .event_handler = _http_event_handler,
+        .buffer_size = HTTP_RECEIVE_BUFFER_SIZE
+        };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t errh = esp_http_client_perform(client);
+    if (errh == ESP_OK) {
+        ESP_LOGI(TAG, "mesh_info CALL Status=%d, content_length=%d",
+                esp_http_client_get_status_code(client),
+                esp_http_client_get_content_length(client));
+    }else{
+        ESP_LOGE(TAG, "\nGET failed:%s", esp_err_to_name(err));
+    }
+    esp_http_client_cleanup(client);
+    #endif
 }
 
 char *randstring(size_t length) {
@@ -158,7 +192,7 @@ esp_err_t light_request(uint8_t cid, uint16_t value) {
     sprintf(json_request, "{\"request\":\"set_status\",\"characteristics\":[{\"cid\":%d,\"value\":%d}]}",
             cid, value);
     
-    esp_http_client_set_header(client, "Mesh-Node-Mac", MESH_LAMP_MAC);
+    esp_http_client_set_header(client, "Mesh-Node-Mac", meshLampMacs);
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_header(client, "Accept", "*/*");
     esp_http_client_set_header(client, "Connection", "keep-alive");
@@ -291,7 +325,11 @@ void wifi_init_sta(void)
 
 void app_main() {
     printf("HUE slider for ESP-MDF Light\n");
-
+    
+    #ifdef MESH_LAMP_MAC
+      printf("MESH_LAMP_MAC set by define to: %s\n", MESH_LAMP_MAC);
+      sprintf(meshLampMacs, "%s", MESH_LAMP_MAC);
+    #endif
     // WiFi log level
     esp_log_level_set("wifi", ESP_LOG_ERROR);
 
@@ -305,7 +343,6 @@ void app_main() {
     ESP_ERROR_CHECK(ret);
 
     // Connect to wifi
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
 
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
@@ -313,7 +350,10 @@ void app_main() {
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
     xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
 
-    printf("Free heap:%d\n",xPortGetFreeHeapSize());
+    #ifdef DEBUG_ENABLED
+      ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+      printf("Free heap:%d\n",xPortGetFreeHeapSize());
+    #endif
 }
 
 /* Creates a semaphore to handle concurrent call to lvgl stuff
@@ -480,8 +520,8 @@ static void create_demo_application(void)
 
     tv = lv_tabview_create(lv_scr_act(), NULL);
     lv_obj_t * info = lv_label_create(tv, NULL);
-    lv_label_set_text(info, "Welcome to the colors slider demo");
-    lv_obj_align(info, NULL, LV_ALIGN_IN_TOP_LEFT, 10, 10);
+    lv_label_set_text(info, "Welcome to the HUE slider demo to control ESP-MESH Lamps");
+    lv_obj_align(info, NULL, LV_ALIGN_IN_TOP_LEFT, 20, 10);
 
     // Build UX functions to avoid repeating same code X times
     create_slider(tv, "HUE", slider_hue_event_cb, 0, 359);
