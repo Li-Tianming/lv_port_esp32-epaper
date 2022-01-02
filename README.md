@@ -77,6 +77,12 @@ Instructions assume you are using the v4.x toolchain, otherwise use the make com
 
 8. If the build don't throw any errors, flash the demo with `idf.py -p (YOUR SERIAL PORT) flash` (with `make` this is just `make flash` - in 3.x PORT is configured in `menuconfig`)
 
+9. For [EPDiy](https://github.com/vroland/epdiy) board, Make sure to select the correct board revision and display type in `Components E-Paper Driver`.
+
+    9.1. Select  `(X) <LV_THEME_DEFAULT_INIT_MONO> Default init for mono theme` in ` Component config → LVGL configuration → Theme usage → Select theme default init`.   
+   
+    9.2. Uncheck all in `Component config → LVGL configuration → Theme usage → Enable theme usage`. 
+
 ## Use LVGL in your ESP-IDF project
 
 LVGL now includes a Kconfig file which is used to configure most of the LVGL configuration options via menuconfig, so it's not necessary to use a custom `lv_conf.h` file.
