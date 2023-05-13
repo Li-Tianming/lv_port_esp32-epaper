@@ -106,7 +106,7 @@ static void guiTask(void *pvParameter) {
 
     /* Actual size in pixels, not bytes. */
     // Missing 56 PX between chunks, why? + (LV_HOR_RES_MAX*56)
-    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/10);
+    uint32_t size_in_px = LV_HOR_RES_MAX*LV_VER_RES_MAX;
 
     /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
