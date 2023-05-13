@@ -14,16 +14,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+//#define CONFIG_LV_USE_DEMO_WIDGETS
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_freertos_hooks.h"
 #include "freertos/semphr.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
-
+#include "esp_timer.h"
 // Should match with your epaper module, size
-// CalEPD try: Works but it really needs to be implemented in test il3820.c not here: 
-//#include <gdew0583t7.h>
+// CalEPD try: Works but it really needs to be implemented in test lgvgl_tft/calepd_epaper.cpp
+//#include <EPAPER_MODEL.h>
 
 /* Littlevgl specific */
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -36,7 +38,7 @@
 
 //#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
+        #include "lv_examples/lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
         // Leave a new define to make only epaper demos
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
         #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
