@@ -17,3 +17,6 @@
 [submodule "components/lvgl_epaper_drivers"]
 	path = components/lvgl_epaper_drivers
 	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
+[submodule "components/sharp-lcd"]
+	path = components/sharp-lcd
+	url = https://github.com/martinberlin/SHARP_Memory_Display-IDF.git
