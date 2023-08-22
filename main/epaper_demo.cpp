@@ -12,6 +12,7 @@
 #include "esp_freertos_hooks.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "driver/gpio.h"
 
 // LVGL
@@ -63,6 +64,7 @@ static void guiTask(void *pvParameter) {
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
     // Screen is cleaned in first flush
+    printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
 
     lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf1 != NULL);
@@ -74,7 +76,7 @@ static void guiTask(void *pvParameter) {
     /* Actual size in pixels, not bytes. PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
-    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/10);
+    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/20);
     //size_in_px *= 8;
 
 

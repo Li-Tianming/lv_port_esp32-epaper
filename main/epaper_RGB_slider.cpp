@@ -13,6 +13,7 @@
 #include "esp_system.h"
 #include "driver/gpio.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 // LVGL
 #include "lvgl/lvgl.h"
 #include "lvgl_helpers.h"

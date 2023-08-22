@@ -36,7 +36,6 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
-#define TOUCH_INT_GPIO 13
 /**********************
  *   APPLICATION MAIN
  **********************/
@@ -75,9 +74,7 @@ static void guiTask(void *pvParameter) {
     /* Actual size in pixels, not bytes. PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
-    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/10);
-    //size_in_px *= 8;
-
+    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX); // / 10
 
     /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
@@ -150,11 +147,11 @@ lv_obj_t * label;lv_obj_t * label2;lv_obj_t * label3;
 static void btn_sleep_cb(lv_obj_t * obj, lv_event_t e)
 {
     if (lv_switch_get_state(obj)) {
-    printf("switch: ON Going to SLEEP!");
+    printf("switch: ON\n");
     //vTaskDelay(pdMS_TO_TICKS(500));
     //esp_deep_sleep_start();
     } else {
-        printf("switch: OFF");
+        printf("switch: OFF\n");
     }
 }
 
