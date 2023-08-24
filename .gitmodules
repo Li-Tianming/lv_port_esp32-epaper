@@ -11,9 +11,6 @@
 [submodule "components/Adafruit-GFX"]
 	path = components/Adafruit-GFX
 	url = https://github.com/martinberlin/Adafruit-GFX-Library-ESP-IDF
-[submodule "components/lvgl_epaper_drivers"]
-	path = components/lvgl_epaper_drivers
-	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
 [submodule "components/sharp-lcd"]
 	path = components/sharp-lcd
 	url = https://github.com/martinberlin/SHARP_Memory_Display-IDF.git
@@ -21,3 +18,6 @@
 	path = components/epdiy
 	url = https://github.com/vroland/epdiy
 	branch = s3_color_research
+[submodule "components/lvgl_epaper_drivers"]
+	path = components/lvgl_epaper_drivers
+	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
