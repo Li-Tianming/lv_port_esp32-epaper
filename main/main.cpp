@@ -96,8 +96,8 @@ static void guiTask(void *pvParameter) {
 
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
-
-    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    // MALLOC_CAP_DMA is also an option
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     assert(buf1 != NULL);
 
     static lv_color_t *buf2 = NULL;
@@ -105,8 +105,8 @@ static void guiTask(void *pvParameter) {
     static lv_disp_buf_t disp_buf;
 
     /* Actual size in pixels, not bytes. */
-    // Missing 56 PX between chunks, why? + (LV_HOR_RES_MAX*56)
-    uint32_t size_in_px = LV_HOR_RES_MAX*LV_VER_RES_MAX;
+    // DISP_BUF_SIZE is defined in lvgl_helpers.h
+    uint32_t size_in_px = DISP_BUF_SIZE;
 
     /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
