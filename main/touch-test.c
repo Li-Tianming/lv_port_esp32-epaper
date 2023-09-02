@@ -9,6 +9,10 @@
 #define SCL_PIN  GPIO_NUM_40
 #define I2C_PORT I2C_NUM_0
 
+// When the touch panel has different pixels definition
+float x_adjust = 1.55;
+float y_adjust = 0.8;
+
 esp_err_t i2c_init(void)
 {
     const i2c_config_t i2c_conf = {
@@ -76,8 +80,8 @@ void app_main() {
     esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
 
     esp_lcd_touch_config_t tp_cfg = {
-        .x_max = 1200,
-        .y_max = 825,
+        .x_max = 1025,
+        .y_max = 770,
         .rst_gpio_num = -1,
         .int_gpio_num = -1,
         .levels = {
@@ -85,8 +89,8 @@ void app_main() {
             .interrupt = 0,
         },
         .flags = {
-            .swap_xy = 0,
-            .mirror_x = 0,
+            .swap_xy = 1,
+            .mirror_x = 1,
             .mirror_y = 0,
         },
     };
@@ -105,7 +109,8 @@ void app_main() {
         uint8_t touch_cnt = 0;
         bool touchpad_pressed = esp_lcd_touch_get_coordinates(tp, touch_x, touch_y, touch_strength, &touch_cnt, 2);
         if (touchpad_pressed) {
-            printf("x:%d y:%d str:%d count:%d\n\n", (int)touch_x[0], (int)touch_y[0], (int)touch_strength[0], touch_cnt);
+            printf("xa:%d ya:%d   x:%d y:%d str:%d count:%d\n\n", 
+            (int)(touch_x[0]*x_adjust), (int)(touch_y[0]*y_adjust), (int)touch_x[0], (int)touch_y[0], (int)touch_strength[0], touch_cnt);
         }
     }
 }

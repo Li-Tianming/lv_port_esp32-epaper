@@ -96,7 +96,7 @@ static void guiTask(void *pvParameter) {
 
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
-    // MALLOC_CAP_DMA is also an option
+    // MALLOC_CAP_DMA is also an option. MALLOC_CAP_SPIRAM allows to /8 the 9.7 inch screen height
     lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     assert(buf1 != NULL);
 
