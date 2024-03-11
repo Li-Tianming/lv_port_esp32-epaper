@@ -1,21 +1,33 @@
 dependencies:
   espressif/esp_lcd_touch:
-    component_hash: 6cc76832cda51d73353a7e8d7aa07073d6cdb75b1ad66e2d98badd768f6c830a
+    component_hash: d4d8f2dc33205797169a97a02e0d89a8982f59fe0509129b54422052b8522f59
     source:
       service_url: https://api.components.espressif.com/
       type: service
-    version: 1.1.0
+    version: 1.1.1
   espressif/esp_lcd_touch_gt911:
     component_hash: 5c23166e9eeeea779ee39ce47d35dd5cdd9a7f05a32fb93b4a55612dab85572f
     source:
       service_url: https://api.components.espressif.com/
       type: service
     version: 1.0.0
+  espressif/esp_tinyusb:
+    component_hash: 43d73c626724054db083ad2a537e8af223e3bca7a915fc38a9d9c6c7f2920a69
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.4.3
+  espressif/tinyusb:
+    component_hash: a01cfb210e3bca8f046ca55b3aeb6b4329c22345ca2479e29d1ce7dc267abe65
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 0.15.0~5
   idf:
     component_hash: null
     source:
       type: idf
     version: 5.1.0
-manifest_hash: bbe5457ae6dc343083e056470a5dc651b139281087beb6eb90c97aebc17edaa0
+manifest_hash: c7e07c7dc6bdb47bf20a781a734831f4a30a8ef074736ffd571e7ad18984d032
 target: esp32s3
 version: 1.0.0
