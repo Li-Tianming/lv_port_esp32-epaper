@@ -19,6 +19,17 @@
 #define TS_RES  9
 
 #define TOUCH_ADDR 0x24
+
+#define CY_REG_BASE         	0x00
+#define GET_NUM_TOUCHES(x)     	((x) & 0x0F)
+#define GET_TOUCH1_ID(x)       	(((x) & 0xF0) >> 4)
+#define GET_TOUCH2_ID(x)       	((x) & 0x0F)
+#define CY_XPOS             		0
+#define CY_YPOS             		1
+#define CY_MT_TCH1_IDX      		0
+#define CY_MT_TCH2_IDX      		1
+#define be16_to_cpu(x) (uint16_t)((((x) & 0xFF00) >> 8) | (((x) & 0x00FF) << 8))
+
 #define CY_OPERATE_MODE    		0x00
 #define CY_SOFT_RESET_MODE      0x01
 #define CY_LOW_POWER         	0x04
@@ -176,6 +187,57 @@ esp_err_t i2c_write_reg( uint8_t reg, uint8_t *pdata, uint8_t count ) {
 
 static QueueHandle_t gpio_evt_queue = NULL;
 
+static int _cyttsp_hndshk_n_write(uint8_t write_back)
+{
+	int retval = -1;
+	uint8_t hst_mode[1];
+	uint8_t cmd[1];
+	uint8_t tries = 0;
+	while (retval < 0 && tries++ < 20){
+		DELAY(5);
+        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
+        if(retval < 0) {	
+			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
+				__func__, retval, tries);
+			continue;
+		}
+        cmd[0] = hst_mode[0] & CY_HNDSHK_BIT ?
+		write_back & ~CY_HNDSHK_BIT :
+		write_back | CY_HNDSHK_BIT;
+        retval = i2c_write_reg(CY_REG_BASE, &cmd, sizeof(cmd));
+        if(retval < 0)
+			printf("%s: bus write fail on handshake ret=%d, retries=%d\n",
+				__func__, retval, tries);
+    }
+    return retval;
+}
+
+// 317 cyttsp.c
+static int _cyttsp_hndshk()
+{
+	int retval = -1;
+	uint8_t hst_mode[1];
+	uint8_t cmd[1];
+	uint8_t tries = 0;
+	while (retval < 0 && tries++ < 20){
+		DELAY(5);
+        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
+        if(retval < 0) {	
+			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
+				__func__, retval, tries);
+			continue;
+		}
+        cmd[0] = hst_mode[0] & CY_HNDSHK_BIT ?
+		hst_mode[0] & ~CY_HNDSHK_BIT :
+		hst_mode[0] | CY_HNDSHK_BIT;
+        retval = i2c_write_reg(CY_REG_BASE, &cmd, sizeof(cmd));
+        if(retval < 0)
+			printf("%s: bus write fail on handshake ret=%d, retries=%d\n",
+				__func__, retval, tries);
+    }
+    return retval;
+}
+
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
@@ -187,7 +249,27 @@ static void touch_INT(void* arg)
     uint32_t io_num;
     for (;;) {
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            printf("GPIO[%"PRIu32"] intr, val: %d\n", io_num, gpio_get_level(io_num));
+            //printf("GPIO[%"PRIu32"] intr, val: %d\n", io_num, gpio_get_level(io_num));
+            /* get event data from CYTTSP device */
+            int retval;
+            struct cyttsp_xydata xy_data;
+            retval = i2c_read_reg(CY_REG_BASE, &xy_data, sizeof(xy_data));
+            if (retval < 0) {
+		        printf("%s: Error, fail to read device on host interface bus\n", __func__);
+            }
+            /* provide flow control handshake */
+            _cyttsp_hndshk();
+            int touch = GET_NUM_TOUCHES(xy_data.tt_stat);
+            if (touch == 1) {
+                xy_data.x1 = be16_to_cpu(xy_data.x1);
+                xy_data.y1 = be16_to_cpu(xy_data.y1);
+                printf("x1:%d y1:%d z1:%d\n", xy_data.x1,xy_data.y1,xy_data.z1);
+            }
+            if (touch == 2) {
+                xy_data.x2 = be16_to_cpu(xy_data.x2);
+                xy_data.y2 = be16_to_cpu(xy_data.y2);
+                printf("x2:%d y2:%d z2:%d\n", xy_data.x2,xy_data.y2,xy_data.z2);
+            }
         }
     }
 }
@@ -218,12 +300,6 @@ void i2cscanner(void *ignore) {
     }
 }
 
-void tassss(void *ignore) {
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-    }
-}
-
 void resetTouch() {
     gpio_set_level(TS_RES, 1);
     DELAY(20);
@@ -233,70 +309,18 @@ void resetTouch() {
     DELAY(20);
 }
 
-static int _cyttsp_hndshk_n_write(uint8_t write_back)
-{
-	int retval = -1;
-	uint8_t hst_mode[1];
-	uint8_t cmd[1];
-	uint8_t tries = 0;
-	while (retval < 0 && tries++ < 20){
-		DELAY(5);
-        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
-        if(retval < 0) {	
-			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
-				__func__, retval, tries);
-			continue;
-		}
-        cmd[0] = hst_mode[0] & CY_HNDSHK_BIT ?
-		write_back & ~CY_HNDSHK_BIT :
-		write_back | CY_HNDSHK_BIT;
-        retval = i2c_write_reg(0x00, &cmd, sizeof(cmd));
-        if(retval < 0)
-			printf("%s: bus write fail on handshake ret=%d, retries=%d\n",
-				__func__, retval, tries);
-    }
-    return retval;
-}
-
-// 317 cyttsp.c
-static int _cyttsp_hndshk()
-{
-	int retval = -1;
-	uint8_t hst_mode[1];
-	uint8_t cmd[1];
-	uint8_t tries = 0;
-	while (retval < 0 && tries++ < 20){
-		DELAY(5);
-        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
-        if(retval < 0) {	
-			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
-				__func__, retval, tries);
-			continue;
-		}
-        cmd[0] = hst_mode[0] & CY_HNDSHK_BIT ?
-		hst_mode[0] & ~CY_HNDSHK_BIT :
-		hst_mode[0] | CY_HNDSHK_BIT;
-        retval = i2c_write_reg(0x00, &cmd, sizeof(cmd));
-        if(retval < 0)
-			printf("%s: bus write fail on handshake ret=%d, retries=%d\n",
-				__func__, retval, tries);
-    }
-    return retval;
-}
-
-
 void touchStuff() {
 
     // soft reset
     esp_err_t err;
     uint8_t softres[] = {0x01};
-    err = i2c_write_reg(0x00, &softres, 1);
+    err = i2c_write_reg(CY_REG_BASE, &softres, 1);
     if (err != ESP_OK) {
         printf("i2c_write_reg CY_SOFT_RESET_MODE FAILED \n");
     }
     DELAY(50);
     // write sec_key
-    err = i2c_write_reg(0x00, &sec_key, sizeof(sec_key));
+    err = i2c_write_reg(CY_REG_BASE, &sec_key, sizeof(sec_key));
     if (err != ESP_OK) {
         printf("i2c_write_reg sec_key FAILED \n");
     }
@@ -310,7 +334,7 @@ void touchStuff() {
     struct cyttsp_bootloader_data  bl_data = {};
     do {
 		DELAY(20);
-        i2c_read_reg(0x00, &bl_data, sizeof(bl_data));
+        i2c_read_reg(CY_REG_BASE, &bl_data, sizeof(bl_data));
         uint8_t *bl_data_p = (uint8_t *)&(bl_data);
         for (int i = 0; i < sizeof(struct cyttsp_bootloader_data); i++) {
 			printf("bl_data[%d]=0x%x\n", i, bl_data_p[i]);
@@ -323,7 +347,6 @@ void touchStuff() {
     // Set OP mode
     int retval;
     uint8_t cmd = CY_OPERATE_MODE;
-
     struct cyttsp_xydata xy_data;
     printf("%s set operational mode\n",__func__);
 	memset(&(xy_data), 0, sizeof(xy_data));
@@ -336,7 +359,7 @@ void touchStuff() {
     _cyttsp_hndshk();
     /* wait for TTSP Device to complete switch to Operational mode */
 	DELAY(20);
-    retval = i2c_read_reg(0x00, &xy_data, sizeof(xy_data));
+    retval = i2c_read_reg(CY_REG_BASE, &xy_data, sizeof(xy_data));
     printf("%s: hstmode:0x%x tt_mode:0x%x tt_stat:0x%x ", __func__, xy_data.hst_mode, xy_data.tt_mode, xy_data.tt_stat);
  
 }
