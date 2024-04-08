@@ -32,40 +32,8 @@
 
 #define CY_OPERATE_MODE    		0x00
 #define CY_SOFT_RESET_MODE      0x01
-#define CY_LOW_POWER         	0x04
-
-enum {
-	REG_HST_MODE = 0x0,
-	REG_MFG_STAT,
-	REG_MFG_CMD,
-	REG_MFG_REG0,
-	REG_MFG_REG1,
-	REG_SYS_SCN_TYP = 0x1c,
-};
-
-/* Bootloader File 0 offset */
-#define CY_BL_FILE0       0x00
-/* Bootloader command directive */
-#define CY_BL_CMD         0xFF
-/* Bootloader Enter Loader mode */
-#define CY_BL_ENTER       0x38
-/* Bootloader Write a Block */
-#define CY_BL_WRITE_BLK   0x39
-/* Bootloader Terminate Loader mode */
-#define CY_BL_TERMINATE   0x3B
-/* Bootloader Exit and Verify Checksum command */
-#define CY_BL_EXIT        0xA5
-
+#define CY_LOW_POWER         	0x04 // Non used for now
 #define CY_HNDSHK_BIT     0x80
-/* Bootloader default keys */
-#define CY_BL_KEY0 0
-#define CY_BL_KEY1 1
-#define CY_BL_KEY2 2
-#define CY_BL_KEY3 3
-#define CY_BL_KEY4 4
-#define CY_BL_KEY5 5
-#define CY_BL_KEY6 6
-#define CY_BL_KEY7 7
 
 // I2C common protocol defines
 #define WRITE_BIT                          I2C_MASTER_WRITE /*!< I2C master write */
@@ -75,12 +43,6 @@ enum {
 #define ACK_VAL                            0x0              /*!< I2C ack value */
 #define NACK_VAL                           0x1              /*!< I2C nack value */
 
-static uint8_t bl_cmd[] = {
-	CY_BL_FILE0, CY_BL_CMD, CY_BL_EXIT,
-	CY_BL_KEY0, CY_BL_KEY1, CY_BL_KEY2,
-	CY_BL_KEY3, CY_BL_KEY4, CY_BL_KEY5,
-	CY_BL_KEY6, CY_BL_KEY7
-};
 static uint8_t sec_key[] = {0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
     
 #define DELAY(ms) vTaskDelay(pdMS_TO_TICKS(ms))
@@ -195,7 +157,7 @@ static int _cyttsp_hndshk_n_write(uint8_t write_back)
 	uint8_t tries = 0;
 	while (retval < 0 && tries++ < 20){
 		DELAY(5);
-        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
+        retval = i2c_read_reg(0x00, &hst_mode, sizeof(hst_mode));
         if(retval < 0) {	
 			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
 				__func__, retval, tries);
@@ -221,7 +183,7 @@ static int _cyttsp_hndshk()
 	uint8_t tries = 0;
 	while (retval < 0 && tries++ < 20){
 		DELAY(5);
-        retval = i2c_read_reg(REG_HST_MODE, &hst_mode, sizeof(hst_mode));
+        retval = i2c_read_reg(0x00, &hst_mode, sizeof(hst_mode));
         if(retval < 0) {	
 			printf("%s: bus read fail on handshake ret=%d, retries=%d\n",
 				__func__, retval, tries);
@@ -260,7 +222,7 @@ static void touch_INT(void* arg)
             /* provide flow control handshake */
             _cyttsp_hndshk();
             int touch = GET_NUM_TOUCHES(xy_data.tt_stat);
-            if (touch == 1) {
+            if (touch) {
                 xy_data.x1 = be16_to_cpu(xy_data.x1);
                 xy_data.y1 = be16_to_cpu(xy_data.y1);
                 printf("x1:%d y1:%d z1:%d\n", xy_data.x1,xy_data.y1,xy_data.z1);
@@ -310,7 +272,6 @@ void resetTouch() {
 }
 
 void touchStuff() {
-
     // soft reset
     esp_err_t err;
     uint8_t softres[] = {0x01};
@@ -328,8 +289,7 @@ void touchStuff() {
     DELAY(88);
     
     // Before this there is a part that reads sysinfo and sets some registers
-    // Maybe that is the key to start the engines
-    // 959 static int cyttsp_set_sysinfo_mode
+    // Maybe that is the key to start the engines faster?
     uint8_t tries = 0;
     struct cyttsp_bootloader_data  bl_data = {};
     do {
@@ -351,29 +311,22 @@ void touchStuff() {
     printf("%s set operational mode\n",__func__);
 	memset(&(xy_data), 0, sizeof(xy_data));
 
-    retval = _cyttsp_hndshk_n_write(cmd);
-   if (retval < 0) {
+    // Maybe not needed?
+    /* retval = _cyttsp_hndshk_n_write(cmd);
+    if (retval < 0) {
 		printf("%s: Failed writing block data, err:%d\n",
 			__func__, retval);
     }
-    _cyttsp_hndshk();
+    _cyttsp_hndshk(); */
     /* wait for TTSP Device to complete switch to Operational mode */
 	DELAY(20);
     retval = i2c_read_reg(CY_REG_BASE, &xy_data, sizeof(xy_data));
     printf("%s: hstmode:0x%x tt_mode:0x%x tt_stat:0x%x ", __func__, xy_data.hst_mode, xy_data.tt_mode, xy_data.tt_stat);
- 
 }
 
 void app_main()
 {
-    
-
     gpio_set_direction(TS_RES, GPIO_MODE_OUTPUT);
-    // Not need if is already set in io_conf
-    gpio_pullup_en(TS_INT);
-    gpio_set_direction(TS_INT, GPIO_MODE_INPUT);
-    
-    // Comment this for now since INT pin should get low first
     //zero-initialize the config structure.
     gpio_config_t io_conf = {};
     //interrupt of rising edge
@@ -398,10 +351,9 @@ void app_main()
 
     // Start I2C scanner task
     //xTaskCreatePinnedToCore(i2cscanner, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, APP_CPU_NUM);
-
     resetTouch();
     touchStuff();
 
     printf("Waiting for INT pin signal\n");
-// Here should kick in touch_INT task when you press the panel
+    // Here should kick in touch_INT task when you press the panel
 }
