@@ -182,7 +182,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg)
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
-static void gpio_task_example(void* arg)
+static void touch_INT(void* arg)
 {
     uint32_t io_num;
     for (;;) {
@@ -319,13 +319,6 @@ void touchStuff() {
 	} while (GET_BOOTLOADERMODE(bl_data.bl_status) && tries++ < 10);
 
     printf("bl_data status=0x%x\n", GET_BOOTLOADERMODE(bl_data.bl_status));
-   
-    // Exit BL
-    /*     err = i2c_write_reg(0x00, &bl_cmd, sizeof(bl_cmd));
-    if (err != ESP_OK) {
-        printf("i2c_write_reg bl_cmd FAILED \n");
-    }
-    printf("i2c_write_reg bl_cmd OK \n"); */
 
     // Set OP mode
     int retval;
@@ -356,7 +349,7 @@ void app_main()
     // Not need if is already set in io_conf
     gpio_pullup_en(TS_INT);
     gpio_set_direction(TS_INT, GPIO_MODE_INPUT);
-    /*
+    
     // Comment this for now since INT pin should get low first
     //zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -370,30 +363,22 @@ void app_main()
     io_conf.pull_up_en = 1;
     gpio_config(&io_conf);
     //create a queue to handle gpio event from isr
-    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint8_t));
     // Setup interrupt for this IO that goes low on the interrupt
     gpio_set_intr_type(TS_INT, GPIO_INTR_NEGEDGE);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(TS_INT, gpio_isr_handler, (void *)TS_INT);
-    */
+    
     i2c_master_init();
+    // INT detection task
+    xTaskCreatePinnedToCore(touch_INT, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, APP_CPU_NUM);
 
-    // Start task
+    // Start I2C scanner task
     //xTaskCreatePinnedToCore(i2cscanner, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, APP_CPU_NUM);
 
     resetTouch();
     touchStuff();
 
     printf("Waiting for INT pin signal\n");
-
-int touched = 1;
-while (1) {
-    // INT Pin never get's LOW on touch so far
- uint8_t ri = gpio_get_level(TS_INT);
- if (ri == 0) {
-    printf("I %d c:%d\n", ri, touched++);
-     _cyttsp_hndshk();
-    }
- DELAY(10);
-   }
+// Here should kick in touch_INT task when you press the panel
 }
