@@ -1,0 +1,9 @@
+dependencies:
+  esp_lcd_touch:
+    public: true
+    version: ^1.1.0
+  idf:
+    version: '>=4.4.2'
+description: ESP LCD Touch TMA445 - touch controller Cypress TMA445
+url: https://github.com/espressif/esp-bsp/tree/master/components/lcd_touch/
+version: 1.1.0
