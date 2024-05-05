@@ -1,13 +1,6 @@
-[submodule "lv_examples"]
-	path = components/lv_examples/lv_examples
-	url = https://github.com/littlevgl/lv_examples.git
-	branch = release/v7
 [submodule "components/lvgl"]
 	path = components/lvgl
 	url = https://github.com/lvgl/lvgl.git
-[submodule "components/CalEPD"]
-	path = components/CalEPD
-	url = https://github.com/martinberlin/CalEPD.git
 [submodule "components/Adafruit-GFX"]
 	path = components/Adafruit-GFX
 	url = https://github.com/martinberlin/Adafruit-GFX-Library-ESP-IDF
@@ -21,3 +14,6 @@
 [submodule "components/lvgl_epaper_drivers"]
 	path = components/lvgl_epaper_drivers
 	url = https://github.com/martinberlin/lvgl_epaper_drivers.git
+[submodule "components/lv_examples/lv_examples"]
+	path = components/lv_examples/lv_examples
+	url = https://github.com/martinberlin/lv_demos_epaper.git

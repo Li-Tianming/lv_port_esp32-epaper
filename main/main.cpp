@@ -41,11 +41,11 @@
         #include "lv_examples/lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
         // Leave a new define to make only epaper demos
     #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
-        #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
+        #include "lv_examples/lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
     #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
-        #include "lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
+        #include "lv_examples/lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
     #elif defined CONFIG_LV_USE_DEMO_STRESS
-        #include "lv_examples/src/lv_demo_stress/lv_demo_stress.h"
+        #include "lv_examples/lv_examples/src/lv_demo_stress/lv_demo_stress.h"
     #else
         #error "No demo application selected."
     #endif
@@ -74,8 +74,8 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-     printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
-   
+    printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    printf("LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -117,15 +117,15 @@ static void guiTask(void *pvParameter) {
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
     disp_drv.flush_cb = disp_driver_flush;
-
+  /*Set the resolution of the display*/
+    disp_drv.hor_res = LV_HOR_RES_MAX;
+    disp_drv.ver_res = LV_VER_RES_MAX;
     /* When using a monochrome display we need to register the callbacks:
      * - rounder_cb
      * - set_px_cb */
+    disp_drv.set_px_cb = disp_driver_set_px;
 #ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
     disp_drv.rounder_cb = disp_driver_rounder;
-    disp_drv.set_px_cb = disp_driver_set_px;
-#elif CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER || CONFIG_LV_EPAPER_CALEPD_DISPLAY_CONTROLLER
-    disp_drv.set_px_cb = disp_driver_set_px;
 #endif
     
     disp_drv.draw_buf = &disp_buf;
