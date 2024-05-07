@@ -1,5 +1,7 @@
 /* LVGL Example project for Epaper displays
- * Just a simple layout, buttons and checkboxes
+ * Just a simple layout with a slider
+
+ * Optional: When using v7 Kaleido PCB, trigger PWM from Front-Light (FL)
  */
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,6 +16,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 
 // LVGL
 #include "lvgl/lvgl.h"
@@ -23,7 +26,6 @@
  *      DEFINES
  *********************/
 #define TAG "epaper"
-#define LV_TICK_PERIOD_MS 1
 
 extern "C"
 {
@@ -36,13 +38,53 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
-#define TOUCH_INT_GPIO 13
+
+#define FL_WARM   GPIO_NUM_11
+#define FL_COLD   GPIO_NUM_12
+
+#define LV_TICK_PERIOD_MS 1
+#define LEDC_TIMER              LEDC_TIMER_0
+#define LEDC_MODE               LEDC_LOW_SPEED_MODE
+#define LEDC_OUTPUT_IO          (11) // Define the output GPIO: 11 for Kindle
+#define LEDC_CHANNEL            LEDC_CHANNEL_0
+#define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
+#define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
+#define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
+
 /**********************
  *   APPLICATION MAIN
  **********************/
 
 void app_main() {
     printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    gpio_set_direction(FL_WARM, GPIO_MODE_OUTPUT);
+    gpio_set_direction(FL_COLD, GPIO_MODE_OUTPUT);
+    gpio_set_level(FL_WARM, 0);
+    gpio_set_level(FL_COLD, 0);
+    // Prepare and then apply the LEDC PWM timer configuration
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode       = LEDC_MODE,
+        .duty_resolution  = LEDC_DUTY_RES,
+        .timer_num        = LEDC_TIMER,
+        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 4 kHz
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+        // Prepare and then apply the LEDC PWM channel configuration
+    ledc_channel_config_t ledc_channel = {
+        .gpio_num       = LEDC_OUTPUT_IO,
+        .speed_mode     = LEDC_MODE,
+        .channel        = LEDC_CHANNEL,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .timer_sel      = LEDC_TIMER,
+        
+        .duty           = 0, // Set duty to 0%
+        .hpoint         = 0
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    // Set duty to 50%
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, LEDC_DUTY));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
@@ -72,29 +114,33 @@ static void guiTask(void *pvParameter) {
     // Do not use double buffer for epaper
     lv_color_t* buf2 = NULL;
 
-    static lv_disp_buf_t disp_buf;
+    static lv_disp_draw_buf_t disp_buf;
     /* Actual size in pixels, not bytes. PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
-    uint32_t size_in_px = LV_HOR_RES_MAX*(LV_VER_RES_MAX/20);
+    uint32_t size_in_px = DISP_BUF_SIZE;
     //size_in_px *= 8;
 
 
-    /* Initialize the working buffer depending on the selected display.
+       /* Initialize the working buffer depending on the selected display.
      * NOTE: buf2 == NULL when using monochrome displays. */
-    lv_disp_buf_init(&disp_buf, buf1, buf2, size_in_px);
+    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, size_in_px);
 
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
-    
-    // Rounder disabled
-    #if defined CONFIG_LV_EPAPER_EPDIY_DISPLAY_CONTROLLER
-      //disp_drv.rounder_cb = disp_driver_rounder;
-    #endif
-    /* When using an epaper display we need to register these additional callbacks */
     disp_drv.flush_cb = disp_driver_flush;
+  /*Set the resolution of the display*/
+    disp_drv.hor_res = LV_HOR_RES_MAX;
+    disp_drv.ver_res = LV_VER_RES_MAX;
+    /* When using a monochrome display we need to register the callbacks:
+     * - rounder_cb
+     * - set_px_cb */
     disp_drv.set_px_cb = disp_driver_set_px;
-    disp_drv.buffer = &disp_buf;
+#ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
+    disp_drv.rounder_cb = disp_driver_rounder;
+#endif
+    
+    disp_drv.draw_buf = &disp_buf;
     lv_disp_drv_register(&disp_drv);
 
     /* Register an input device when enabled on the menuconfig */
@@ -136,108 +182,39 @@ static void guiTask(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-/**********************
- *  STATIC VARIABLES
- **********************/
-static lv_obj_t * tv;
+static void slider_event_cb(lv_event_t * e);
+static lv_obj_t * slider_label;
 
-
-// Create this global since we will access from a callback function
-lv_obj_t * ta1;
-
-uint8_t btn_size = 1;
-lv_obj_t * label;lv_obj_t * label2;lv_obj_t * label3;
-
-static void btn_sleep_cb(lv_obj_t * obj, lv_event_t e)
+/**
+ * A default slider with a label displaying the current value
+ */
+void create_demo_application(void)
 {
-    if (lv_switch_get_state(obj)) {
-    printf("switch: ON Going to SLEEP!");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    esp_deep_sleep_start();
-    } else {
-        printf("switch: OFF");
-    }
+    /*Create a slider in the center of the display*/
+    lv_obj_t * slider = lv_slider_create(lv_scr_act());
+    lv_obj_center(slider);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /*Create a label below the slider*/
+    slider_label = lv_label_create(lv_scr_act());
+    lv_label_set_text(slider_label, "0%");
+
+    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 }
 
-static void btn_cb(lv_obj_t * obj, lv_event_t e)
+static void slider_event_cb(lv_event_t * e)
 {
-    printf("click x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
+    lv_obj_t * slider = lv_event_get_target(e);
+    char buf[8];
+    int sliderv = (int)lv_slider_get_value(slider);
+    int led_duty = sliderv * 80;
+    printf("v:%d\n",sliderv);
+    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
+    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 
-    btn_size = (btn_size == 1) ? 2 : 1;
-    //lv_obj_set_pos(btn, 0, 100);
-    lv_obj_set_width(obj, lv_obj_get_width_grid(tv, btn_size, 1));
-    lv_label_set_text(label , (btn_size == 1) ? "BIG" : "Small");
-}
-
-static void btn2_cb(lv_obj_t * obj, lv_event_t e)
-{
-    printf("click2 x:%d y%d\n\n",obj->coords.x1,obj->coords.y1);
-
-    switch (e) {
-    case LV_EVENT_PRESSED:
-        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1+20);
-        break;
-    
-    case LV_EVENT_LONG_PRESSED:
-        lv_obj_set_pos(obj, obj->coords.x1, obj->coords.y1-20);
-        break;
-    }
-    
-}
-
-static void checkbox_handler(lv_obj_t * obj, lv_event_t event)
-{
-    if(event == LV_EVENT_VALUE_CHANGED) {
-        printf("State: %s\n", lv_checkbox_is_checked(obj) ? "Checked" : "Unchecked");
-    }
-}
-
-static void create_demo_application(void)
-{
-    // Notes: After first refresh the tabview boxes are loosing their top margin
-    //        Also refreshing certain areas is messing the framebuffer (corrupted?)
-    tv = lv_tabview_create(lv_scr_act(), NULL);
-    lv_obj_set_height(tv,560);
-
-    lv_obj_t *btn = lv_btn_create(tv, NULL);
-    // Printing this button 10 pixel y down, refreshed it again to 0,0 in the pixel callback. Why?
-    lv_obj_set_pos(btn,  10, 20);
-    lv_obj_set_width(btn, lv_obj_get_width_grid(tv, 2, 1));
-    label = lv_label_create(btn, NULL);
-    lv_label_set_text(label, "Small");
-    lv_obj_set_event_cb(btn, btn_cb);
-
-    lv_obj_t *btn2 = lv_btn_create(tv, NULL);
-    //             obj , x  , y -> Doing a Y more than 100 it simply get's the down part of the button out
-    //                             and prints this button end in the top left (Buf too small?)
-    lv_obj_set_pos(btn2, 480, 90);
-    lv_obj_set_width(btn2, lv_obj_get_width_grid(tv, 2, 1));
-    label2 = lv_label_create(btn2, NULL);
-    lv_label_set_text(label2, "BUTTON 2");
-    lv_obj_set_event_cb(btn2, btn2_cb);
-
-    lv_obj_t * cb = lv_checkbox_create(tv, NULL);
-    lv_checkbox_set_text(cb, "I do not agree.");
-    lv_obj_align(cb, NULL, LV_ALIGN_IN_TOP_LEFT, 30, 80);
-    lv_obj_set_event_cb(cb, checkbox_handler);
-
-    /*Create a normal drop down list*/
-    lv_obj_t * ddlist = lv_dropdown_create(tv, NULL);
-    lv_dropdown_set_options(ddlist, "Apple\n"
-            "Banana\n"
-            "Orange\n"
-            "Melon\n"
-            "Grape\n"
-            "Raspberry");
-    lv_obj_align(ddlist, NULL, LV_ALIGN_IN_TOP_RIGHT, -20, 20);
-
-    /*Create a switch and apply the styles*/
-    lv_obj_t *sw1 = lv_switch_create(tv, NULL);
-    lv_obj_set_pos(sw1, 230, 80);
-    lv_obj_set_event_cb(sw1, btn_sleep_cb);
-    lv_obj_t *sw_label = lv_label_create(tv, NULL);
-    lv_obj_align(sw_label, sw1, LV_LABEL_ALIGN_CENTER, 0, 28);
-    lv_label_set_text(sw_label, "SLEEP");
+    lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
+    lv_label_set_text(slider_label, buf);
+    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 }
 
 static void lv_tick_task(void *arg) {
