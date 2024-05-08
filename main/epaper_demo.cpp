@@ -51,6 +51,12 @@ static void create_demo_application(void);
 #define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
 #define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
 
+static void slider_event_cb(lv_event_t * e);
+
+static lv_obj_t * slider;
+static lv_obj_t * slider_label;
+uint8_t led_duty_multiplier = 80;
+
 /**********************
  *   APPLICATION MAIN
  **********************/
@@ -182,8 +188,45 @@ static void guiTask(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-static void slider_event_cb(lv_event_t * e);
-static lv_obj_t * slider_label;
+/***
+ * slider event - updates PWM duty
+ **/
+static void slider_event_cb(lv_event_t * e)
+{
+    slider = lv_event_get_target(e);
+    char buf[8];
+    int sliderv = (int)lv_slider_get_value(slider);
+    int led_duty = sliderv * led_duty_multiplier;
+    printf("v:%d\n",sliderv);
+    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
+    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+
+    lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
+    lv_label_set_text(slider_label, buf);
+    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+}
+
+bool fl_status = false;
+
+static void event_handler_on(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    int led_duty = 0;
+    
+    if(code == LV_EVENT_VALUE_CHANGED) {
+        fl_status = !fl_status;
+        int duty = (fl_status) ? 90 : 0;
+        led_duty = duty * led_duty_multiplier;
+        lv_slider_set_value(slider, duty, LV_ANIM_ON);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%d%%", duty);
+        lv_label_set_text(slider_label, buf);
+
+        //printf("code: %d\n", (int)code);
+        ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
+        ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+    }
+}
 
 /**
  * A default slider with a label displaying the current value
@@ -191,7 +234,7 @@ static lv_obj_t * slider_label;
 void create_demo_application(void)
 {
     /*Create a slider in the center of the display*/
-    lv_obj_t * slider = lv_slider_create(lv_scr_act());
+    slider = lv_slider_create(lv_scr_act());
     lv_obj_center(slider);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
@@ -200,21 +243,17 @@ void create_demo_application(void)
     lv_label_set_text(slider_label, "0%");
 
     lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-}
 
-static void slider_event_cb(lv_event_t * e)
-{
-    lv_obj_t * slider = lv_event_get_target(e);
-    char buf[8];
-    int sliderv = (int)lv_slider_get_value(slider);
-    int led_duty = sliderv * 80;
-    printf("v:%d\n",sliderv);
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+    lv_obj_t * label;
+    lv_obj_t * btn2 = lv_btn_create(lv_scr_act());
+    lv_obj_add_event_cb(btn2, event_handler_on, LV_EVENT_ALL, NULL);
+    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 80);
+    lv_obj_add_flag(btn2, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_height(btn2, LV_SIZE_CONTENT);
 
-    lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
-    lv_label_set_text(slider_label, buf);
-    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+    label = lv_label_create(btn2);
+    lv_label_set_text(label, "Toggle ON/OFF");
+    lv_obj_center(label);
 }
 
 static void lv_tick_task(void *arg) {
