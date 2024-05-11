@@ -62,7 +62,9 @@ uint8_t led_duty_multiplier = 80;
  **********************/
 
 void app_main() {
-    printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    printf("Epaper example. LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
+
+    //printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
     gpio_set_direction(FL_WARM, GPIO_MODE_OUTPUT);
     gpio_set_direction(FL_COLD, GPIO_MODE_OUTPUT);
     gpio_set_level(FL_WARM, 0);
