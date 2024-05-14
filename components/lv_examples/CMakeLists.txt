@@ -1,3 +1,4 @@
+return()
 if(ESP_PLATFORM)
 
 file(GLOB_RECURSE SOURCES lv_examples/*.c)

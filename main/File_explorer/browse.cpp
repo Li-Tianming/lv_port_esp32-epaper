@@ -115,28 +115,29 @@ static void guiTask(void *pvParameter) {
     lvgl_driver_init();
     // Screen is cleaned in first flush
     printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
-
     lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     assert(buf1 != NULL);
 
     // OPTIONAL: Do not use double buffer for epaper
-    //lv_color_t* buf2 = NULL;
-    lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    lv_color_t* buf2 = NULL;
+    //lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     
-
-    //static lv_disp_draw_buf_t disp_buf;
-    /* Actual size in pixels, not bytes. PLEASE NOTE:
+    /* PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
     uint32_t size_in_px = DISP_BUF_SIZE;
     //size_in_px /= 8; // In v9 size is in bytes
     lv_display_t * disp = lv_display_create(LV_HOR_RES_MAX, LV_VER_RES_MAX);
     lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
+
+    printf("LV ROTATION:%d\n\n",lv_display_get_rotation(disp));
+    lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
     // COLOR SETTING after v9:
-    //LV_COLOR_FORMAT_L8 = monochrome 8BPP, LV_COLOR_FORMAT_RGB565 = 16BPP color
-    lv_display_set_color_format(disp, LV_COLOR_FORMAT_L8); // MONO -> 1st prio Target
-    // Kaleido version test: Used to work with RGB232:
-    //lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+    //LV_COLOR_FORMAT_L8 = monochrome 1BPP, LV_COLOR_FORMAT_RGB565 = 16BPP color
+    //lv_display_set_color_format(disp, LV_COLOR_FORMAT_L8); // MONO -> 1st prio Target
+    
+    // Kaleido version test: Used to work with RGB233:
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB332);
 
     // Needed? Not sure for Eink
     //lv_display_add_event_cb(disp, disp_release_cb, LV_EVENT_DELETE, lv_display_get_user_data(disp));

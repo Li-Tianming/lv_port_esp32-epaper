@@ -1,6 +1,6 @@
 idf_component_register(SRCS 
-#main.cpp
-File_explorer/browse.cpp
+main.cpp
+#File_explorer/browse.cpp
 #epaper_RGB_slider.cpp
 #epaper_demo.cpp
 #sharp_demo.cpp
