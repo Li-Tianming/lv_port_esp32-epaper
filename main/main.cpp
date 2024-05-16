@@ -113,10 +113,11 @@ static void guiTask(void *pvParameter) {
     lv_display_t * disp = lv_display_create(LV_HOR_RES_MAX, LV_VER_RES_MAX);
     lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
 
-    printf("LV ROTATION:%d\n\n",lv_display_get_rotation(disp));
+    printf("\nLV ROTATION:%d\n",lv_display_get_rotation(disp));
     lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
     // COLOR SETTING after v9:
-    // Kaleido version test: Used to work with RGB233:
+    // LV_COLOR_FORMAT_L8  1 byte per pixel. 0 black 255 white
+    // Kaleido version test: Used to work with RGB332: LV_COLOR_FORMAT_RGB332
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB332);
     /**MODE
      * LV_DISPLAY_RENDER_MODE_PARTIAL This way the buffers can be smaller then the display to save RAM. At least 1/10 screen sized buffer(s) are recommended.

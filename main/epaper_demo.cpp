@@ -1,6 +1,4 @@
-/* LVGL Example project for Epaper displays
- * Just a simple layout with a slider
-
+/* LVGL Example project to make minimal slider
  * Optional: When using v7 Kaleido PCB, trigger PWM from Front-Light (FL)
  */
 #include <stdbool.h>
@@ -25,7 +23,7 @@
 /*********************
  *      DEFINES
  *********************/
-#define TAG "epaper"
+#define TAG "Explr"
 
 extern "C"
 {
@@ -38,14 +36,12 @@ static void lv_tick_task(void *arg);
 static void guiTask(void *pvParameter);
 static void create_demo_application(void);
 
-
-#define FL_WARM   GPIO_NUM_11
-#define FL_COLD   GPIO_NUM_12
+#define DISPLAY_FRONTLIGHT    GPIO_NUM_11
 
 #define LV_TICK_PERIOD_MS 1
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO          (11) // Define the output GPIO: 11 for Kindle
+#define LEDC_OUTPUT_IO          int(DISPLAY_FRONTLIGHT)
 #define LEDC_CHANNEL            LEDC_CHANNEL_0
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
 #define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
@@ -65,10 +61,8 @@ void app_main() {
     printf("Epaper example. LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
 
     //printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
-    gpio_set_direction(FL_WARM, GPIO_MODE_OUTPUT);
-    gpio_set_direction(FL_COLD, GPIO_MODE_OUTPUT);
-    gpio_set_level(FL_WARM, 0);
-    gpio_set_level(FL_COLD, 0);
+    gpio_set_direction(DISPLAY_FRONTLIGHT, GPIO_MODE_OUTPUT);
+    gpio_set_level(DISPLAY_FRONTLIGHT, 0);
     // Prepare and then apply the LEDC PWM timer configuration
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_MODE,
@@ -115,49 +109,43 @@ static void guiTask(void *pvParameter) {
     lvgl_driver_init();
     // Screen is cleaned in first flush
     printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
-
     lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     assert(buf1 != NULL);
 
-    // Do not use double buffer for epaper
+    // OPTIONAL: Do not use double buffer for epaper
     lv_color_t* buf2 = NULL;
-
-    static lv_disp_draw_buf_t disp_buf;
-    /* Actual size in pixels, not bytes. PLEASE NOTE:
+    //lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    
+    /* PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
     uint32_t size_in_px = DISP_BUF_SIZE;
-    //size_in_px *= 8;
+    //size_in_px /= 8; // In v9 size is in bytes
+    lv_display_t * disp = lv_display_create(LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
 
+    printf("LV ROTATION:%d\n\n",lv_display_get_rotation(disp));
+    lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
+    // COLOR SETTING after v9:
+    // LV_COLOR_FORMAT_L8 = monochrome 1BPP (8 bits per pixel) Does not work correctly
+    // LV_COLOR_FORMAT_RGB332
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB332);
 
-       /* Initialize the working buffer depending on the selected display.
-     * NOTE: buf2 == NULL when using monochrome displays. */
-    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, size_in_px);
+    // Needed?
+    //lv_display_add_event_cb(disp, disp_release_cb, LV_EVENT_DELETE, lv_display_get_user_data(disp));
 
-    lv_disp_drv_t disp_drv;
-    lv_disp_drv_init(&disp_drv);
-    disp_drv.flush_cb = disp_driver_flush;
-  /*Set the resolution of the display*/
-    disp_drv.hor_res = LV_HOR_RES_MAX;
-    disp_drv.ver_res = LV_VER_RES_MAX;
-    /* When using a monochrome display we need to register the callbacks:
-     * - rounder_cb
-     * - set_px_cb */
-    disp_drv.set_px_cb = disp_driver_set_px;
-#ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    disp_drv.rounder_cb = disp_driver_rounder;
-#endif
-    
-    disp_drv.draw_buf = &disp_buf;
-    lv_disp_drv_register(&disp_drv);
+    /**MODE
+     * LV_DISPLAY_RENDER_MODE_PARTIAL This way the buffers can be smaller then the display to save RAM. At least 1/10 screen sized buffer(s) are recommended.
+     * LV_DISPLAY_RENDER_MODE_DIRECT The buffer(s) has to be screen sized and LVGL will render into the correct location of the buffer. This way the buffer always contain the whole image. With 2 buffers the buffers’ content are kept in sync automatically. (Old v7 behavior)
+     * LV_DISPLAY_RENDER_MODE_FULL Just always redraw the whole screen.
+    */
+    lv_display_set_buffers(disp, buf1, buf2, size_in_px, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     /* Register an input device when enabled on the menuconfig */
 #if CONFIG_LV_TOUCH_CONTROLLER != TOUCH_CONTROLLER_NONE
-    lv_indev_drv_t indev_drv;
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.read_cb = touch_driver_read;
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    lv_indev_drv_register(&indev_drv);
+    lv_indev_t * indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(indev, (lv_indev_read_cb_t) touch_driver_read);
 #endif
 
     /* Create and start a periodic timer interrupt to call lv_tick_inc */
@@ -195,7 +183,7 @@ static void guiTask(void *pvParameter) {
  **/
 static void slider_event_cb(lv_event_t * e)
 {
-    slider = lv_event_get_target(e);
+    slider = (lv_obj_t*) lv_event_get_target(e);
     char buf[8];
     int sliderv = (int)lv_slider_get_value(slider);
     int led_duty = sliderv * led_duty_multiplier;
@@ -206,6 +194,24 @@ static void slider_event_cb(lv_event_t * e)
     lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
     lv_label_set_text(slider_label, buf);
     lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+}
+
+static void file_explorer_event_handler(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t * obj = (lv_obj_t*)lv_event_get_target(e);
+
+    if(code == LV_EVENT_VALUE_CHANGED) {
+        const char * cur_path =  lv_file_explorer_get_current_path(obj);
+        const char * sel_fn = lv_file_explorer_get_selected_file_name(obj);
+        LV_LOG_USER("%s%s", cur_path, sel_fn);
+    }
+}
+
+void lv_example_file_explorer(void)
+{
+    lv_obj_t * file_explorer = lv_file_explorer_create(lv_screen_active());
+    lv_file_explorer_set_sort(file_explorer, LV_EXPLORER_SORT_KIND);
 }
 
 bool fl_status = false;
@@ -243,19 +249,20 @@ void create_demo_application(void)
     /*Create a label below the slider*/
     slider_label = lv_label_create(lv_scr_act());
     lv_label_set_text(slider_label, "0%");
-
+    lv_obj_align(slider, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
     lv_obj_t * label;
     lv_obj_t * btn2 = lv_btn_create(lv_scr_act());
     lv_obj_add_event_cb(btn2, event_handler_on, LV_EVENT_ALL, NULL);
-    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 80);
+    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 120);
     lv_obj_add_flag(btn2, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_height(btn2, LV_SIZE_CONTENT);
 
     label = lv_label_create(btn2);
     lv_label_set_text(label, "Toggle ON/OFF");
     lv_obj_center(label);
+    //lv_example_file_explorer();
 }
 
 static void lv_tick_task(void *arg) {
