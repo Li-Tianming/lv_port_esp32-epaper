@@ -22,6 +22,7 @@
 #include "esp_sleep.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 
@@ -29,16 +30,21 @@
 #include "lvgl/lvgl.h"
 #include "lvgl_helpers.h"
 
+extern "C"
+{
+    void app_main();
+    // Our custom lv_file_explorer
+    #include "lv_file_explorer.c"
+    //#include "include/lv_file_explorer.h"
+}
+
 /*********************
  *      DEFINES
  *********************/
 static const char *T = "Explorer";
-#define EXAMPLE_MAX_CHAR_SIZE    64
+#define EXAMPLE_MAX_CHAR_SIZE 64
+#define LV_EXPLORER_SORT_KIND LV_EXPLORER_SORT_NONE
 
-extern "C"
-{
-    void app_main();
-}
 /**********************
  *  STATIC PROTOTYPES
  **********************/
