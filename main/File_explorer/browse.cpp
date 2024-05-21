@@ -209,8 +209,17 @@ static void file_explorer_event_handler(lv_event_t * e)
             printf("JPG viewer not implemented\n");
         }
         if (is_end_with(sel_fn, ".txt") == true) {
+            // Check how to delete when we have more than X tabs
+            /* if (file_open_tabs>0) {
+              lv_obj_clean(tab_open_file);
+            } */
+            
             /*Add content to the tabs*/
             tab_open_file = lv_tabview_add_tab(tab_main_view, sel_fn);
+        
+            // TODO: Check how to set last Tab as active
+            lv_tabview_set_active(tab_main_view, lv_tabview_get_tab_count(tab_main_view), LV_ANIM_OFF);
+
             char * file_open = (char *) malloc(1 + strlen(cur_path)+ strlen(sel_fn) );
             strcpy(file_open, cur_path);
             strcat(file_open, sel_fn);
@@ -219,8 +228,10 @@ static void file_explorer_event_handler(lv_event_t * e)
             printf("\n\n%s", file_content);
             /*Create the text area*/
             lv_obj_t * ta = lv_textarea_create(tab_open_file);
+            lv_obj_set_width(ta, 1000);
+            lv_obj_set_height(ta, 700);
             lv_textarea_set_text(ta, file_content);
-            // Kills everything:
+            // Kills everything: It seems does not accept multi-line content?
             //lv_label_set_text(tab_open_file, "FILE CONTENT");
         }
         

@@ -586,7 +586,7 @@ static void browser_file_event_handler(lv_event_t * e)
     }
 }
 
-const static int read_block_size = 100;
+const static int read_block_size = 1025;
 char * lv_read_file(const char *path) {
     FILE *f = fopen(path, "r");
     if (f == NULL) {
@@ -603,7 +603,12 @@ char * lv_read_file(const char *path) {
         
         ESP_LOGI(TAG, "Reading %d bytes from file %s", file_size_bytes, path);
        
-        fgets(output, file_size_bytes, f);
+        //fgets(output, file_size_bytes, f);
+        char buf[read_block_size];
+        while (fgets(buf, read_block_size, f) != NULL) {
+            //printf("%s", f);
+            strcat(output, buf);
+        }
         
         fclose(f);
     } else {
