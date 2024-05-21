@@ -1,17 +1,7 @@
-/**
- * @file lv_file_explorer.c
- *
- */
-
-/* #ifdef __cplusplus
-extern "C" {
-#endif */
-/*********************
- *      INCLUDES
- *********************/
 #include "include/lv_file_explorer.h"
 #include "lvgl.h"
 #include "core/lv_global.h"
+#include <dirent.h>
 
 /*********************
  *      DEFINES
@@ -24,9 +14,12 @@ extern "C" {
 #define quick_access_list_button_style (LV_GLOBAL_DEFAULT()->fe_list_button_style)
 
 /**********************
- *      TYPEDEFS
+ *      GLOBALS
  **********************/
-
+struct dirent *dp;
+DIR *dir;
+const bool format_if_mount_failed = false;
+static const char * TAG = "Explorer";
 /**********************
  *  STATIC PROTOTYPES
  **********************/
@@ -67,6 +60,83 @@ const lv_obj_class_t lv_file_explorer_class = {
 /**********************
  *   GLOBAL FUNCTIONS
  **********************/
+/*Initialize your Storage device and File system.*/
+static void fs_init(void)
+{
+    /*E.g. for FatFS initialize the SD card and FatFS itself*/
+    esp_err_t ret;
+
+    // Options for mounting the filesystem.
+    // If format_if_mount_failed is set to true, SD card will be partitioned and
+    // formatted in case when mounting fails.
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = format_if_mount_failed,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
+    sdmmc_card_t *card;
+    const char mount_point[] = MOUNT_POINT;
+    ESP_LOGI(TAG, "Initializing SD card");
+
+    // Use settings defined above to initialize SD card and mount FAT filesystem.
+    // Note: esp_vfs_fat_sdmmc/sdspi_mount is all-in-one convenience functions.
+    // Please check its source code and implement error recovery when developing
+    // production applications.
+
+    ESP_LOGI(TAG, "Using SDMMC peripheral");
+
+    // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
+    // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 40MHz for SDMMC)
+    // Example: for fixed frequency of 10MHz, use host.max_freq_khz = 10000;
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+
+    // This initializes the slot without card detect (CD) and write protect (WP) signals.
+    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+
+    // Set bus width to use:
+#if CONFIG_EXAMPLE_SDMMC_BUS_WIDTH_4
+    slot_config.width = 4;
+#else
+    slot_config.width = 1;
+#endif
+
+    // On chips where the GPIOs used for SD card can be configured, set them in
+    // the slot_config structure:
+#ifdef CONFIG_SOC_SDMMC_USE_GPIO_MATRIX
+    slot_config.clk = CONFIG_SD_CLK;
+    slot_config.cmd = CONFIG_SD_CMD;
+    slot_config.d0 = CONFIG_SD_D0;
+#ifdef CONFIG_EXAMPLE_SDMMC_BUS_WIDTH_4
+    slot_config.d1 = CONFIG_SD_D1;
+    slot_config.d2 = CONFIG_SD_D2;
+    slot_config.d3 = CONFIG_SD_D3;
+#endif  // CONFIG_EXAMPLE_SDMMC_BUS_WIDTH_4
+#endif
+
+    // Enable internal pullups on enabled pins. The internal pullups
+    // are insufficient however, please make sure 10k external pullups are
+    // connected on the bus. This is for debug / example purpose only.
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    ESP_LOGI(TAG, "Mounting filesystem");
+    ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
+                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+        }
+        return;
+    }
+    ESP_LOGI(TAG, "Filesystem mounted in %s", MOUNT_POINT);
+
+    // Card has been initialized, print its properties
+    sdmmc_card_print_info(stdout, card);
+}
 
 lv_obj_t * lv_file_explorer_create(lv_obj_t * parent)
 {
@@ -533,12 +603,14 @@ static void show_dir(lv_obj_t * obj, const char * path)
 
     char fn[LV_FILE_EXPLORER_PATH_MAX_LEN];
     uint16_t index = 0;
-    lv_fs_dir_t dir;
     lv_fs_res_t res;
 
-    res = lv_fs_dir_open(&dir, path);
-    if(res != LV_FS_RES_OK) {
-        LV_LOG_USER("Open dir error %d!", res);
+    // No need to "open directory" for now TODO: Check if makes sense to validate that exists
+    ESP_LOGI(TAG, "dir_open %s", path);
+    dir = opendir(path);
+
+    if (dir == NULL) {
+        LV_LOG_USER("Open dir error");
         return;
     }
 
@@ -547,14 +619,9 @@ static void show_dir(lv_obj_t * obj, const char * path)
     lv_table_set_cell_value(explorer->file_table, 0, 1, "0");
     lv_table_set_cell_value(explorer->file_table, 1, 1, "0");
 
-    while(1) {
-        res = lv_fs_dir_read(&dir, fn, sizeof(fn));
-        if(res != LV_FS_RES_OK) {
-            LV_LOG_USER("Driver, file or directory is not exists %d!", res);
-            break;
-        }
-
+    while ((dp = readdir (dir)) != NULL) {
         /*fn is empty, if not more files to read*/
+        strcpy(fn, dp->d_name);
         if(lv_strlen(fn) == 0) {
             LV_LOG_USER("Not more files to read!");
             break;
@@ -592,7 +659,7 @@ static void show_dir(lv_obj_t * obj, const char * path)
         index++;
     }
 
-    lv_fs_dir_close(&dir);
+     closedir(dir);
 
     lv_table_set_row_count(explorer->file_table, index);
     file_explorer_sort(obj);
@@ -705,7 +772,3 @@ static bool is_end_with(const char * str1, const char * str2)
 
     return true;
 }
-
-/* #ifdef __cplusplus
-}
-#endif */

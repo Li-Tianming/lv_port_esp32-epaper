@@ -12,7 +12,6 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
-#include "lv_port_fs.c"
 
 // FreeRTOS related & IDF
 #include "freertos/FreeRTOS.h"
@@ -217,14 +216,18 @@ static void file_explorer_event_handler(lv_event_t * e)
         const char * cur_path =  lv_file_explorer_get_current_path(obj);
         const char * sel_fn = lv_file_explorer_get_selected_file_name(obj);
         LV_LOG_USER("%s%s", cur_path, sel_fn);
+        printf("Selected path: %s\n", sel_fn);
     }
 }
 
 void lv_example_file_explorer(void)
 {
+    fs_init();
     lv_obj_t * file_explorer = lv_file_explorer_create(lv_screen_active());
     lv_file_explorer_set_sort(file_explorer, LV_EXPLORER_SORT_KIND);
     lv_file_explorer_open_dir(file_explorer, "/S");
+
+    lv_obj_add_event_cb(file_explorer, file_explorer_event_handler, LV_EVENT_ALL, NULL);
 }
 
 /**
@@ -243,7 +246,6 @@ void create_demo_application(void)
     lv_obj_align(slider, LV_ALIGN_TOP_RIGHT, 0, 80);
     lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
-    lv_port_fs_init();
     lv_example_file_explorer();
 }
 

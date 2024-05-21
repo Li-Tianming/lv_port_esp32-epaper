@@ -3,7 +3,7 @@
  *
  */
 #define LV_FILE_EXPLORER_QUICK_ACCESS 0
-#define LV_FILE_EXPLORER_PATH_MAX_LEN 128
+#define LV_FILE_EXPLORER_PATH_MAX_LEN 256
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +18,16 @@ extern "C" {
 /*********************
  *      DEFINES
  *********************/
+// Set to true to use 4 wires for the SD Card
+#define CONFIG_EXAMPLE_SDMMC_BUS_WIDTH_4 false
+#define MOUNT_POINT "/S"
 
+#define CONFIG_SD_CLK GPIO_NUM_10
+#define CONFIG_SD_CMD GPIO_NUM_14
+#define CONFIG_SD_D0 GPIO_NUM_0
+#define CONFIG_SD_D1 GPIO_NUM_1
+#define CONFIG_SD_D2 GPIO_NUM_2
+#define CONFIG_SD_D3 GPIO_NUM_13
 /**********************
  *      TYPEDEFS
  **********************/
