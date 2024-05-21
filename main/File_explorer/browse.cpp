@@ -201,13 +201,31 @@ static void file_explorer_event_handler(lv_event_t * e)
         
         LV_LOG_USER("%s%s", cur_path, sel_fn);
         printf("CHANGED path: %s file: %s\n", cur_path, sel_fn);
+        // Todo move this to a central location
+        char * file_open = (char *) malloc(1 + strlen(cur_path)+ strlen(sel_fn) );
+        strcpy(file_open, cur_path);
+        strcat(file_open, sel_fn);
 
         if (is_end_with(sel_fn, ".gif") == true) {
             printf("GIF viewer not implemented\n");
         }
-        if (is_end_with(sel_fn, ".jpg") == true) {
-            printf("JPG viewer not implemented\n");
+
+        if (is_end_with(sel_fn, ".jpg") || is_end_with(sel_fn, ".JPG")) {
+            tab_open_file = lv_tabview_add_tab(tab_main_view, sel_fn);
+            lv_tabview_set_active(tab_main_view, lv_tabview_get_tab_count(tab_main_view), LV_ANIM_OFF);
+            
+            /* Build up the img descriptor of LVGL */
+            lv_image_dsc_t imgdsc;
+            imgdsc.header.cf = LV_COLOR_FORMAT_RGB332;
+            imgdsc.header.w = 1200;
+            imgdsc.header.h = 900;
+            imgdsc.data = lv_read_img(file_open, imgdsc);
+            ESP_LOGI(TAG, "DOES NOT WORK YET!\nimg w:%d h:%d with %d bytes", imgdsc.header.w, imgdsc.header.h, (int) imgdsc.data_size);
+            lv_obj_t * wp;
+            wp = lv_img_create(tab_open_file);
+            lv_image_set_src(wp, &imgdsc);
         }
+
         if (is_end_with(sel_fn, ".txt") == true) {
             // Check how to delete when we have more than X tabs
             /* if (file_open_tabs>0) {
@@ -219,20 +237,14 @@ static void file_explorer_event_handler(lv_event_t * e)
         
             // TODO: Check how to set last Tab as active
             lv_tabview_set_active(tab_main_view, lv_tabview_get_tab_count(tab_main_view), LV_ANIM_OFF);
-
-            char * file_open = (char *) malloc(1 + strlen(cur_path)+ strlen(sel_fn) );
-            strcpy(file_open, cur_path);
-            strcat(file_open, sel_fn);
             printf("PATH to open: %s\n\n", file_open);
             const char * file_content = lv_read_file(file_open);
             printf("\n\n%s", file_content);
-            /*Create the text area*/
+            /* Create the text area */
             lv_obj_t * ta = lv_textarea_create(tab_open_file);
             lv_obj_set_width(ta, 1000);
             lv_obj_set_height(ta, 700);
             lv_textarea_set_text(ta, file_content);
-            // Kills everything: It seems does not accept multi-line content?
-            //lv_label_set_text(tab_open_file, "FILE CONTENT");
         }
         
     }

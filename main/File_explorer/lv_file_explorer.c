@@ -593,29 +593,53 @@ char * lv_read_file(const char *path) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return (char*)"Failed to open file";
     }
-    char * output =  (char*) malloc(FILE_BUFSIZE);
-    
     struct stat file_stat;
     // Check file size
     int status = stat(path, &file_stat);
+    int file_size_bytes = file_stat.st_size;
+    char * output = (char*)heap_caps_malloc(file_size_bytes, MALLOC_CAP_SPIRAM);
+
     if (status == ESP_OK) {
-        int file_size_bytes = file_stat.st_size;
         
         ESP_LOGI(TAG, "Reading %d bytes from file %s", file_size_bytes, path);
-       
-        //fgets(output, file_size_bytes, f);
+        // File should be read per blocks. Does not work to fgets(buf, fullsize)
         char buf[read_block_size];
         while (fgets(buf, read_block_size, f) != NULL) {
             //printf("%s", f);
             strcat(output, buf);
         }
-        
         fclose(f);
+        return output;
     } else {
         output = "Reading file properties failed";
         ESP_LOGI(TAG, "stat file Failed with %d\n" , status);
+        return output;
     }
-    return output;
+}
+
+uint8_t * lv_read_img(const char *path, lv_image_dsc_t &imgdsc) {
+    FILE *f = fopen(path, "r");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open img for reading");
+        return 0;
+    }
+    struct stat file_stat;
+    // Check file size
+    int status = stat(path, &file_stat);
+    int file_size_bytes = file_stat.st_size;
+    uint8_t * output = (uint8_t *)heap_caps_malloc(file_size_bytes, MALLOC_CAP_SPIRAM);
+
+    if (status == ESP_OK) {
+        //ESP_LOGI(TAG, "Reading %d bytes from img %s", file_size_bytes, path);
+        imgdsc.data_size = file_size_bytes;
+        // File should be read per blocks. Does not work to fgets(buf, fullsize)
+        fread(output, 1, file_size_bytes, f);
+        fclose(f);
+        return output;
+    } else {
+        ESP_LOGI(TAG, "stat file Failed with %d\n" , status);
+        return 0;
+    }
 }
 
 static void show_dir(lv_obj_t * obj, const char * path)
