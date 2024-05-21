@@ -54,10 +54,6 @@ const lv_obj_class_t lv_file_explorer_class = {
 };
 
 /**********************
- *      MACROS
- **********************/
-
-/**********************
  *   GLOBAL FUNCTIONS
  **********************/
 /*Initialize your Storage device and File system.*/
@@ -76,14 +72,8 @@ static void fs_init(void)
     };
     sdmmc_card_t *card;
     const char mount_point[] = MOUNT_POINT;
-    ESP_LOGI(TAG, "Initializing SD card");
-
     // Use settings defined above to initialize SD card and mount FAT filesystem.
     // Note: esp_vfs_fat_sdmmc/sdspi_mount is all-in-one convenience functions.
-    // Please check its source code and implement error recovery when developing
-    // production applications.
-
-    ESP_LOGI(TAG, "Using SDMMC peripheral");
 
     // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
     // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 40MHz for SDMMC)
@@ -119,7 +109,6 @@ static void fs_init(void)
     // connected on the bus. This is for debug / example purpose only.
     slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-    ESP_LOGI(TAG, "Mounting filesystem");
     ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 
     if (ret != ESP_OK) {
@@ -597,6 +586,33 @@ static void browser_file_event_handler(lv_event_t * e)
     }
 }
 
+const static int read_block_size = 100;
+char * lv_read_file(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return (char*)"Failed to open file";
+    }
+    char * output =  (char*) malloc(FILE_BUFSIZE);
+    
+    struct stat file_stat;
+    // Check file size
+    int status = stat(path, &file_stat);
+    if (status == ESP_OK) {
+        int file_size_bytes = file_stat.st_size;
+        
+        ESP_LOGI(TAG, "Reading %d bytes from file %s", file_size_bytes, path);
+       
+        fgets(output, file_size_bytes, f);
+        
+        fclose(f);
+    } else {
+        output = "Reading file properties failed";
+        ESP_LOGI(TAG, "stat file Failed with %d\n" , status);
+    }
+    return output;
+}
+
 static void show_dir(lv_obj_t * obj, const char * path)
 {
     lv_file_explorer_t * explorer = (lv_file_explorer_t *)obj;
@@ -623,14 +639,16 @@ static void show_dir(lv_obj_t * obj, const char * path)
         /*fn is empty, if not more files to read*/
         strcpy(fn, dp->d_name);
         if(lv_strlen(fn) == 0) {
-            LV_LOG_USER("Not more files to read!");
+            LV_LOG_USER("No more files to read");
+            ESP_LOGI(TAG, "No more files to read");
             break;
         }
 
         if((is_end_with(fn, ".png") == true)  || (is_end_with(fn, ".PNG") == true)  || \
            (is_end_with(fn, ".jpg") == true) || (is_end_with(fn, ".JPG") == true) || \
            (is_end_with(fn, ".bmp") == true) || (is_end_with(fn, ".BMP") == true) || \
-           (is_end_with(fn, ".gif") == true) || (is_end_with(fn, ".GIF") == true)) {
+           (is_end_with(fn, ".gif") == true) || (is_end_with(fn, ".GIF") == true) || \
+           (is_end_with(fn, ".jpeg") == true)) {
             lv_table_set_cell_value_fmt(explorer->file_table, index, 0, LV_SYMBOL_IMAGE "  %s", fn);
             lv_table_set_cell_value(explorer->file_table, index, 1, "1");
         }
@@ -641,6 +659,10 @@ static void show_dir(lv_obj_t * obj, const char * path)
         }
         else if((is_end_with(fn, ".mp4") == true) || (is_end_with(fn, ".MP4") == true)) {
             lv_table_set_cell_value_fmt(explorer->file_table, index, 0, LV_SYMBOL_VIDEO "  %s", fn);
+            lv_table_set_cell_value(explorer->file_table, index, 1, "3");
+        }
+        else if((is_end_with(fn, ".txt") == true) || (is_end_with(fn, ".TXT") == true)) {
+            lv_table_set_cell_value_fmt(explorer->file_table, index, 0, LV_SYMBOL_FILE "  %s", fn);
             lv_table_set_cell_value(explorer->file_table, index, 1, "3");
         }
         else if((is_end_with(fn, ".") == true) || (is_end_with(fn, "..") == true)) {

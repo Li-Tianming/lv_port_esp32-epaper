@@ -40,9 +40,15 @@ extern "C"
 /*********************
  *      DEFINES
  *********************/
-static const char *T = "Explorer";
 #define EXAMPLE_MAX_CHAR_SIZE 64
 #define LV_EXPLORER_SORT_KIND LV_EXPLORER_SORT_NONE
+
+lv_obj_t * tab_main_view;
+lv_obj_t * tab_main;
+lv_obj_t * tab_settings;
+lv_obj_t * tab_open_file;
+lv_obj_t * switch_label;
+uint8_t led_duty_multiplier = 80;
 
 /**********************
  *  STATIC PROTOTYPES
@@ -62,16 +68,51 @@ static void create_demo_application(void);
 #define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
 #define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
 
-static void slider_event_cb(lv_event_t * e);
-
-static lv_obj_t * slider;
-static lv_obj_t * slider_label;
-uint8_t led_duty_multiplier = 80;
+static void switch_event_cb(lv_event_t * e);
 
 /* Creates a semaphore to handle concurrent call to lvgl stuff
  * If you wish to call *any* lvgl function from other threads/tasks
  * you should lock on the very same semaphore! */
 SemaphoreHandle_t xGuiSemaphore;
+
+/**********************
+ *   APPLICATION MAIN
+ **********************/
+void app_main() {
+    printf("Epaper example. LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
+
+    //printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    gpio_set_direction(DISPLAY_FRONTLIGHT, GPIO_MODE_OUTPUT);
+    gpio_set_level(DISPLAY_FRONTLIGHT, 0);
+    // Prepare and then apply the LEDC PWM timer configuration
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode       = LEDC_MODE,
+        .duty_resolution  = LEDC_DUTY_RES,
+        .timer_num        = LEDC_TIMER,
+        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 4 kHz
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+        // Prepare and then apply the LEDC PWM channel configuration
+    ledc_channel_config_t ledc_channel = {
+        .gpio_num       = LEDC_OUTPUT_IO,
+        .speed_mode     = LEDC_MODE,
+        .channel        = LEDC_CHANNEL,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .timer_sel      = LEDC_TIMER,
+        
+        .duty           = 0, // Set duty to 0%
+        .hpoint         = 0
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    // Set duty to 50%
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, LEDC_DUTY));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+    /* If you want to use a task to create the graphic, you NEED to create a Pinned task
+     * Otherwise there can be problem such as memory corruption and so on.
+     * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
+    xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
+}
 
 static void guiTask(void *pvParameter) {
 
@@ -149,64 +190,6 @@ static void guiTask(void *pvParameter) {
 }
 
 
-/**********************
- *   APPLICATION MAIN
- **********************/
-
-void app_main() {
-    printf("Epaper example. LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
-
-    //printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
-    gpio_set_direction(DISPLAY_FRONTLIGHT, GPIO_MODE_OUTPUT);
-    gpio_set_level(DISPLAY_FRONTLIGHT, 0);
-    // Prepare and then apply the LEDC PWM timer configuration
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LEDC_MODE,
-        .duty_resolution  = LEDC_DUTY_RES,
-        .timer_num        = LEDC_TIMER,
-        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 4 kHz
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-        // Prepare and then apply the LEDC PWM channel configuration
-    ledc_channel_config_t ledc_channel = {
-        .gpio_num       = LEDC_OUTPUT_IO,
-        .speed_mode     = LEDC_MODE,
-        .channel        = LEDC_CHANNEL,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .timer_sel      = LEDC_TIMER,
-        
-        .duty           = 0, // Set duty to 0%
-        .hpoint         = 0
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-    // Set duty to 50%
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, LEDC_DUTY));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
-    /* If you want to use a task to create the graphic, you NEED to create a Pinned task
-     * Otherwise there can be problem such as memory corruption and so on.
-     * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
-    xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
-}
-
-/***
- * slider event - updates PWM duty
- **/
-static void slider_event_cb(lv_event_t * e)
-{
-    slider = (lv_obj_t*) lv_event_get_target(e);
-    char buf[8];
-    int sliderv = (int)lv_slider_get_value(slider);
-    int led_duty = sliderv * led_duty_multiplier;
-    printf("v:%d\n",sliderv);
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
-
-    lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
-    lv_label_set_text(slider_label, buf);
-    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-}
-
 static void file_explorer_event_handler(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -215,19 +198,62 @@ static void file_explorer_event_handler(lv_event_t * e)
     if(code == LV_EVENT_VALUE_CHANGED) {
         const char * cur_path =  lv_file_explorer_get_current_path(obj);
         const char * sel_fn = lv_file_explorer_get_selected_file_name(obj);
+        
         LV_LOG_USER("%s%s", cur_path, sel_fn);
-        printf("Selected path: %s\n", sel_fn);
+        printf("CHANGED path: %s file: %s\n", cur_path, sel_fn);
+
+        if (is_end_with(sel_fn, ".gif") == true) {
+            printf("GIF viewer not implemented\n");
+        }
+        if (is_end_with(sel_fn, ".jpg") == true) {
+            printf("JPG viewer not implemented\n");
+        }
+        if (is_end_with(sel_fn, ".txt") == true) {
+            /*Add content to the tabs*/
+            tab_open_file = lv_tabview_add_tab(tab_main_view, sel_fn);
+            char * file_open = (char *) malloc(1 + strlen(cur_path)+ strlen(sel_fn) );
+            strcpy(file_open, cur_path);
+            strcat(file_open, sel_fn);
+            printf("PATH to open: %s\n\n", file_open);
+            const char * file_content = lv_read_file(file_open);
+            printf("\n\n%s", file_content);
+            /*Create the text area*/
+            lv_obj_t * ta = lv_textarea_create(tab_open_file);
+            lv_textarea_set_text(ta, file_content);
+            // Kills everything:
+            //lv_label_set_text(tab_open_file, "FILE CONTENT");
+        }
+        
     }
 }
 
-void lv_example_file_explorer(void)
+void lv_example_file_explorer(lv_obj_t * tab)
 {
     fs_init();
-    lv_obj_t * file_explorer = lv_file_explorer_create(lv_screen_active());
+    lv_obj_t * file_explorer = lv_file_explorer_create(tab);
     lv_file_explorer_set_sort(file_explorer, LV_EXPLORER_SORT_KIND);
     lv_file_explorer_open_dir(file_explorer, "/S");
 
     lv_obj_add_event_cb(file_explorer, file_explorer_event_handler, LV_EVENT_ALL, NULL);
+}
+
+/***
+ * Switch event - updates PWM duty
+ **/
+static void switch_event_handler(lv_event_t * e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t * obj = (lv_obj_t*) lv_event_get_target(e);
+    if(code == LV_EVENT_VALUE_CHANGED) {
+        LV_UNUSED(obj);
+        bool slider_state = lv_obj_has_state(obj, LV_STATE_CHECKED);
+        LV_LOG_USER("State: %s\n", slider_state ? "On" : "Off");
+
+        lv_label_set_text(switch_label, slider_state ? "ON" : "OFF");
+
+        int led_duty = (int)slider_state * led_duty_multiplier * 1000;
+        ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
+        ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+    }
 }
 
 /**
@@ -235,18 +261,27 @@ void lv_example_file_explorer(void)
  */
 void create_demo_application(void)
 {
-    /*Create a slider in the center of the display*/
-    slider = lv_slider_create(lv_scr_act());
-    lv_obj_center(slider);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    /* Create a Tab view object (global) */
+    tab_main_view = lv_tabview_create(lv_scr_act());
+    lv_obj_set_scrollbar_mode(lv_scr_act(), LV_SCROLLBAR_MODE_OFF);
 
-    /*Create a label below the slider*/
-    slider_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(slider_label, "0%");
-    lv_obj_align(slider, LV_ALIGN_TOP_RIGHT, 0, 80);
-    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+    /* Add 2 tabs (the tabs are page (lv_page) and can be scrolled*/
+    tab_main = lv_tabview_add_tab(tab_main_view, "SD Explorer");
+    tab_settings = lv_tabview_add_tab(tab_main_view, "Settings");
 
-    lv_example_file_explorer();
+    lv_obj_set_flex_flow(tab_settings, LV_FLEX_FLOW_COLUMN);
+    
+    lv_obj_t * sw;
+    sw = lv_switch_create(tab_settings);
+    lv_obj_set_flex_align(sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    
+    switch_label = lv_label_create(tab_settings);
+    lv_label_set_text(switch_label, "ON");
+
+    lv_obj_add_event_cb(sw, switch_event_handler, LV_EVENT_ALL, NULL);
+    lv_obj_add_flag(sw, LV_OBJ_FLAG_EVENT_BUBBLE);
+    
+    lv_example_file_explorer(tab_main);
 }
 
 static void lv_tick_task(void *arg) {

@@ -4,6 +4,7 @@
  */
 #define LV_FILE_EXPLORER_QUICK_ACCESS 0
 #define LV_FILE_EXPLORER_PATH_MAX_LEN 256
+#define FILE_BUFSIZE 3000
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,6 +106,8 @@ void lv_file_explorer_set_quick_access_path(lv_obj_t * obj, lv_file_explorer_dir
  */
 void lv_file_explorer_set_sort(lv_obj_t * obj, lv_file_explorer_sort_t sort);
 
+
+char * lv_read_file(const char *path);
 /*=====================
  * Getter functions
  *====================*/
