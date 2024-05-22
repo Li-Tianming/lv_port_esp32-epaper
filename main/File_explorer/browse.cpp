@@ -68,8 +68,6 @@ static void create_demo_application(void);
 #define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
 #define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
 
-static void switch_event_cb(lv_event_t * e);
-
 /* Creates a semaphore to handle concurrent call to lvgl stuff
  * If you wish to call *any* lvgl function from other threads/tasks
  * you should lock on the very same semaphore! */
@@ -216,14 +214,19 @@ static void file_explorer_event_handler(lv_event_t * e)
             
             /* Build up the img descriptor of LVGL */
             lv_image_dsc_t imgdsc;
-            imgdsc.header.cf = LV_COLOR_FORMAT_RGB332;
-            imgdsc.header.w = 1200;
-            imgdsc.header.h = 900;
+            imgdsc.header.cf = LV_COLOR_FORMAT_RAW;
             imgdsc.data = lv_read_img(file_open, imgdsc);
+            imgdsc.header.w = 720;
+            imgdsc.header.h = 609;
+            ESP_LOG_BUFFER_HEX(TAG, imgdsc.data, 10);
             ESP_LOGI(TAG, "DOES NOT WORK YET!\nimg w:%d h:%d with %d bytes", imgdsc.header.w, imgdsc.header.h, (int) imgdsc.data_size);
             lv_obj_t * wp;
+
             wp = lv_img_create(tab_open_file);
             lv_image_set_src(wp, &imgdsc);
+
+            lv_obj_set_width(wp, 1000);
+            lv_obj_set_height(wp, 700);
         }
 
         if (is_end_with(sel_fn, ".txt") == true) {
@@ -291,15 +294,19 @@ void create_demo_application(void)
     /* Add 2 tabs (the tabs are page (lv_page) and can be scrolled*/
     tab_main = lv_tabview_add_tab(tab_main_view, "SD Explorer");
     tab_settings = lv_tabview_add_tab(tab_main_view, "Settings");
+    lv_obj_remove_flag(tab_settings, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_set_flex_flow(tab_settings, LV_FLEX_FLOW_COLUMN);
-    
     lv_obj_t * sw;
     sw = lv_switch_create(tab_settings);
+    lv_obj_set_flex_flow(tab_settings, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
+
     switch_label = lv_label_create(tab_settings);
-    lv_label_set_text(switch_label, "ON");
+    lv_label_set_text(switch_label, "LED ON");
+
+    lv_obj_t * cb;
+    cb = lv_checkbox_create(tab_settings);
+    lv_checkbox_set_text(cb, "ON");
 
     lv_obj_add_event_cb(sw, switch_event_handler, LV_EVENT_ALL, NULL);
     lv_obj_add_flag(sw, LV_OBJ_FLAG_EVENT_BUBBLE);

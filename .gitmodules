@@ -16,4 +16,4 @@
 	url = https://github.com/martinberlin/lv_demos_epaper.git
 [submodule "components/lvgl"]
 	path = components/lvgl
-	url = https://github.com/bwhitman/lvgl.git
+	url = https://github.com/martinberlin/lvgl_RGB332.git
