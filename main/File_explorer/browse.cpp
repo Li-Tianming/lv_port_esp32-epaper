@@ -214,19 +214,21 @@ static void file_explorer_event_handler(lv_event_t * e)
             
             /* Build up the img descriptor of LVGL */
             lv_image_dsc_t imgdsc;
-            imgdsc.header.cf = LV_COLOR_FORMAT_RAW;
-            imgdsc.data = lv_read_img(file_open, imgdsc);
+            imgdsc.header.cf = LV_COLOR_FORMAT_RGB332;
             imgdsc.header.w = 720;
             imgdsc.header.h = 609;
+            // TODO how to set w & h dynamically
+            imgdsc.data = lv_read_img(file_open, imgdsc);
+            //decoder_info() outputs JPEGDEC is being used
             ESP_LOG_BUFFER_HEX(TAG, imgdsc.data, 10);
             ESP_LOGI(TAG, "DOES NOT WORK YET!\nimg w:%d h:%d with %d bytes", imgdsc.header.w, imgdsc.header.h, (int) imgdsc.data_size);
             lv_obj_t * wp;
 
             wp = lv_img_create(tab_open_file);
             lv_image_set_src(wp, &imgdsc);
-
-            lv_obj_set_width(wp, 1000);
-            lv_obj_set_height(wp, 700);
+            lv_obj_center(wp);
+            //lv_obj_set_width(wp, 1000);
+            //lv_obj_set_height(wp, 700);
         }
 
         if (is_end_with(sel_fn, ".txt") == true) {
