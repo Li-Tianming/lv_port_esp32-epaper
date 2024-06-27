@@ -14,8 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-//#define CONFIG_LV_USE_DEMO_WIDGETS
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_freertos_hooks.h"
@@ -74,7 +72,7 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-    printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    printf("app_main started. DISP_BUF_SIZE:%d W:%d H:%d\n", DISP_BUF_SIZE, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     printf("LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
@@ -98,19 +96,20 @@ static void guiTask(void *pvParameter) {
     lvgl_driver_init();
     // Screen is cleaned in first flush
     printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
-    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    // In C3 there is no PSRAM: MALLOC_CAP_SPIRAM
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_8BIT);
     assert(buf1 != NULL);
 
     // OPTIONAL: Do not use double buffer for epaper
-    //lv_color_t* buf2 = NULL;
-    lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    lv_color_t* buf2 = NULL;
+    //lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     
     /* PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
     uint32_t size_in_px = DISP_BUF_SIZE;
-    //size_in_px /= 8; // In v9 size is in bytes
-    lv_display_t * disp = lv_display_create(LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    //size_in_px /= 8; // In v9 size is in bytes epd_width(), epd_height()
+    lv_display_t * disp = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
     lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
 
     printf("\nLV ROTATION:%d\n",lv_display_get_rotation(disp));

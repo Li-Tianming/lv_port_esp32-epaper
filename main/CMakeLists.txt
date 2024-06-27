@@ -1,6 +1,6 @@
 idf_component_register(SRCS 
-#main.cpp
-File_explorer/browse.cpp
+main.cpp
+#File_explorer/browse.cpp
 #epaper_RGB_slider.cpp
 #epaper_demo.cpp
 #sharp_demo.cpp
@@ -10,7 +10,7 @@ INCLUDE_DIRS ${LVGL_INCLUDE_DIRS}
 
 REQUIRES 
 # ESP-IDF components
-fatfs driver esp_timer 
+fatfs driver esp_timer
 # LVGL specifics
 lvgl lvgl_epaper_drivers
 )
