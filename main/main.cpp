@@ -14,8 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-//#define CONFIG_LV_USE_DEMO_WIDGETS
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_freertos_hooks.h"
@@ -74,7 +72,7 @@ static void create_demo_application(void);
  **********************/
 
 void app_main() {
-    printf("app_main started. DISP_BUF_SIZE:%d LV_HOR_RES_MAX:%d V_RES_MAX:%d\n", DISP_BUF_SIZE, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+    printf("app_main started. DISP_BUF_SIZE:%d W:%d H:%d\n", DISP_BUF_SIZE, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     printf("LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
@@ -89,55 +87,49 @@ SemaphoreHandle_t xGuiSemaphore;
 
 static void guiTask(void *pvParameter) {
 
-    (void) pvParameter;
+   (void) pvParameter;
     xGuiSemaphore = xSemaphoreCreateMutex();
 
     lv_init();
 
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
-    // MALLOC_CAP_DMA is also an option. MALLOC_CAP_SPIRAM allows to /8 the 9.7 inch screen height
-    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    // Screen is cleaned in first flush
+    printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
+    // In C3 there is no PSRAM: MALLOC_CAP_SPIRAM
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_8BIT);
     assert(buf1 != NULL);
 
-    static lv_color_t *buf2 = NULL;
-
-    // Does not exist anymore in 8.x
-    //static lv_disp_buf_t disp_buf;
-    static lv_disp_draw_buf_t disp_buf;
-
-    /* Actual size in pixels, not bytes. */
-    // DISP_BUF_SIZE is defined in lvgl_helpers.h
-    uint32_t size_in_px = DISP_BUF_SIZE;
-
-    /* Initialize the working buffer depending on the selected display.
-     * NOTE: buf2 == NULL when using monochrome displays. */
-    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, size_in_px);
-
-    lv_disp_drv_t disp_drv;
-    lv_disp_drv_init(&disp_drv);
-    disp_drv.flush_cb = disp_driver_flush;
-  /*Set the resolution of the display*/
-    disp_drv.hor_res = LV_HOR_RES_MAX;
-    disp_drv.ver_res = LV_VER_RES_MAX;
-    /* When using a monochrome display we need to register the callbacks:
-     * - rounder_cb
-     * - set_px_cb */
-    disp_drv.set_px_cb = disp_driver_set_px;
-#ifdef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    disp_drv.rounder_cb = disp_driver_rounder;
-#endif
+    // OPTIONAL: Do not use double buffer for epaper
+    lv_color_t* buf2 = NULL;
+    //lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     
-    disp_drv.draw_buf = &disp_buf;
-    lv_disp_drv_register(&disp_drv);
+    /* PLEASE NOTE:
+       This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
+    */
+    uint32_t size_in_px = DISP_BUF_SIZE;
+    //size_in_px /= 8; // In v9 size is in bytes epd_width(), epd_height()
+    lv_display_t * disp = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
+
+    printf("\nLV ROTATION:%d\n",lv_display_get_rotation(disp));
+    lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
+    // COLOR SETTING after v9:
+    // LV_COLOR_FORMAT_L8  1 byte per pixel. 0 black 255 white
+    // Kaleido version test: Used to work with RGB332: LV_COLOR_FORMAT_RGB332
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB332);
+    /**MODE
+     * LV_DISPLAY_RENDER_MODE_PARTIAL This way the buffers can be smaller then the display to save RAM. At least 1/10 screen sized buffer(s) are recommended.
+     * LV_DISPLAY_RENDER_MODE_DIRECT The buffer(s) has to be screen sized and LVGL will render into the correct location of the buffer. This way the buffer always contain the whole image. With 2 buffers the buffers’ content are kept in sync automatically. (Old v7 behavior)
+     * LV_DISPLAY_RENDER_MODE_FULL Just always redraw the whole screen.
+    */
+    lv_display_set_buffers(disp, buf1, buf2, size_in_px, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     /* Register an input device when enabled on the menuconfig */
 #if CONFIG_LV_TOUCH_CONTROLLER != TOUCH_CONTROLLER_NONE
-    lv_indev_drv_t indev_drv;
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.read_cb = touch_driver_read;
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    lv_indev_drv_register(&indev_drv);
+    lv_indev_t * indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(indev, (lv_indev_read_cb_t) touch_driver_read);
 #endif
 
     /* Create and start a periodic timer interrupt to call lv_tick_inc */

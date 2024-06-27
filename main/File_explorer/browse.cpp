@@ -1,11 +1,19 @@
-/* LVGL Example project to make minimal slider
+/* LVGL Example project for to test new File explorer
+ * ENABLE IT: LVGL configuration -> Others -> File explorer
  * Optional: When using v7 Kaleido PCB, trigger PWM from Front-Light (FL)
  */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+// This example uses SDMMC peripheral to communicate with SD card.
+#include <sys/unistd.h>
+#include <sys/stat.h>
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdmmc_host.h"
 
+// FreeRTOS related & IDF
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -13,6 +21,7 @@
 #include "esp_sleep.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 
@@ -20,15 +29,27 @@
 #include "lvgl/lvgl.h"
 #include "lvgl_helpers.h"
 
-/*********************
- *      DEFINES
- *********************/
-#define TAG "Explr"
-
 extern "C"
 {
     void app_main();
+    // Our custom lv_file_explorer
+    #include "lv_file_explorer.c"
+    //#include "include/lv_file_explorer.h"
 }
+
+/*********************
+ *      DEFINES
+ *********************/
+#define EXAMPLE_MAX_CHAR_SIZE 64
+#define LV_EXPLORER_SORT_KIND LV_EXPLORER_SORT_NONE
+
+lv_obj_t * tab_main_view;
+lv_obj_t * tab_main;
+lv_obj_t * tab_settings;
+lv_obj_t * tab_open_file;
+lv_obj_t * switch_label;
+uint8_t led_duty_multiplier = 80;
+
 /**********************
  *  STATIC PROTOTYPES
  **********************/
@@ -47,16 +68,14 @@ static void create_demo_application(void);
 #define LEDC_DUTY               (0) // 4096 Set duty to 50%. (2 ** 13) * 50% = 4096
 #define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
 
-static void slider_event_cb(lv_event_t * e);
-
-static lv_obj_t * slider;
-static lv_obj_t * slider_label;
-uint8_t led_duty_multiplier = 80;
+/* Creates a semaphore to handle concurrent call to lvgl stuff
+ * If you wish to call *any* lvgl function from other threads/tasks
+ * you should lock on the very same semaphore! */
+SemaphoreHandle_t xGuiSemaphore;
 
 /**********************
  *   APPLICATION MAIN
  **********************/
-
 void app_main() {
     printf("Epaper example. LVGL version %d.%d\n\n", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR);
 
@@ -93,11 +112,6 @@ void app_main() {
     xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
 }
 
-/* Creates a semaphore to handle concurrent call to lvgl stuff
- * If you wish to call *any* lvgl function from other threads/tasks
- * you should lock on the very same semaphore! */
-SemaphoreHandle_t xGuiSemaphore;
-
 static void guiTask(void *pvParameter) {
 
     (void) pvParameter;
@@ -107,19 +121,17 @@ static void guiTask(void *pvParameter) {
 
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
-    // Screen is cleaned in first flush
-    printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
-    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    assert(buf1 != NULL);
-
-    // OPTIONAL: Do not use double buffer for epaper
-    lv_color_t* buf2 = NULL;
-    //lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    
     /* PLEASE NOTE:
        This size must much the size of DISP_BUF_SIZE declared on lvgl_helpers.h
     */
-    uint32_t size_in_px = DISP_BUF_SIZE;
+    printf("DISP_BUF*sizeof(lv_color_t) %d", DISP_BUF_SIZE * sizeof(lv_color_t));
+    lv_color_t* buf1 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    
+    // OPTIONAL: Do not use double buffer for epaper
+    //lv_color_t* buf2 = NULL;
+    lv_color_t* buf2 = (lv_color_t*) heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    assert(buf1 != NULL);
+    
     //size_in_px /= 8; // In v9 size is in bytes
     lv_display_t * disp = lv_display_create(LV_HOR_RES_MAX, LV_VER_RES_MAX);
     lv_display_set_flush_cb(disp, (lv_display_flush_cb_t) disp_driver_flush);
@@ -127,19 +139,16 @@ static void guiTask(void *pvParameter) {
     printf("LV ROTATION:%d\n\n",lv_display_get_rotation(disp));
     lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
     // COLOR SETTING after v9:
-    // LV_COLOR_FORMAT_L8 = monochrome 1BPP (8 bits per pixel) Does not work correctly
+    // LV_COLOR_FORMAT_L8 = monochrome 8BPP (8 bits per pixel)
     // LV_COLOR_FORMAT_RGB332
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB332);
-
-    // Needed?
-    //lv_display_add_event_cb(disp, disp_release_cb, LV_EVENT_DELETE, lv_display_get_user_data(disp));
 
     /**MODE
      * LV_DISPLAY_RENDER_MODE_PARTIAL This way the buffers can be smaller then the display to save RAM. At least 1/10 screen sized buffer(s) are recommended.
      * LV_DISPLAY_RENDER_MODE_DIRECT The buffer(s) has to be screen sized and LVGL will render into the correct location of the buffer. This way the buffer always contain the whole image. With 2 buffers the buffers’ content are kept in sync automatically. (Old v7 behavior)
      * LV_DISPLAY_RENDER_MODE_FULL Just always redraw the whole screen.
     */
-    lv_display_set_buffers(disp, buf1, buf2, size_in_px, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_buffers(disp, buf1, buf2, DISP_BUF_SIZE, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     /* Register an input device when enabled on the menuconfig */
 #if CONFIG_LV_TOUCH_CONTROLLER != TOUCH_CONTROLLER_NONE
@@ -178,23 +187,6 @@ static void guiTask(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-/***
- * slider event - updates PWM duty
- **/
-static void slider_event_cb(lv_event_t * e)
-{
-    slider = (lv_obj_t*) lv_event_get_target(e);
-    char buf[8];
-    int sliderv = (int)lv_slider_get_value(slider);
-    int led_duty = sliderv * led_duty_multiplier;
-    printf("v:%d\n",sliderv);
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
-
-    lv_snprintf(buf, sizeof(buf), "%d%%", sliderv);
-    lv_label_set_text(slider_label, buf);
-    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-}
 
 static void file_explorer_event_handler(lv_event_t * e)
 {
@@ -204,33 +196,89 @@ static void file_explorer_event_handler(lv_event_t * e)
     if(code == LV_EVENT_VALUE_CHANGED) {
         const char * cur_path =  lv_file_explorer_get_current_path(obj);
         const char * sel_fn = lv_file_explorer_get_selected_file_name(obj);
+        
         LV_LOG_USER("%s%s", cur_path, sel_fn);
+        printf("CHANGED path: %s file: %s\n", cur_path, sel_fn);
+        // Todo move this to a central location
+        char * file_open = (char *) malloc(1 + strlen(cur_path)+ strlen(sel_fn) );
+        strcpy(file_open, cur_path);
+        strcat(file_open, sel_fn);
+
+        if (is_end_with(sel_fn, ".gif") == true) {
+            printf("GIF viewer not implemented\n");
+        }
+
+        if (is_end_with(sel_fn, ".jpg") || is_end_with(sel_fn, ".JPG")) {
+            tab_open_file = lv_tabview_add_tab(tab_main_view, sel_fn);
+            lv_tabview_set_active(tab_main_view, lv_tabview_get_tab_count(tab_main_view), LV_ANIM_OFF);
+            
+            /* Build up the img descriptor of LVGL */
+            lv_image_dsc_t imgdsc;
+            imgdsc.header.cf = LV_COLOR_FORMAT_RGB332;
+            imgdsc.header.w = 720;
+            imgdsc.header.h = 609;
+            // TODO how to set w & h dynamically
+            imgdsc.data = lv_read_img(file_open, imgdsc);
+            //decoder_info() outputs JPEGDEC is being used
+            ESP_LOG_BUFFER_HEX(TAG, imgdsc.data, 10);
+            ESP_LOGI(TAG, "DOES NOT WORK YET!\nimg w:%d h:%d with %d bytes", imgdsc.header.w, imgdsc.header.h, (int) imgdsc.data_size);
+            lv_obj_t * wp;
+
+            wp = lv_img_create(tab_open_file);
+            lv_image_set_src(wp, &imgdsc);
+            lv_obj_center(wp);
+            //lv_obj_set_width(wp, 1000);
+            //lv_obj_set_height(wp, 700);
+        }
+
+        if (is_end_with(sel_fn, ".txt") == true) {
+            // Check how to delete when we have more than X tabs
+            /* if (file_open_tabs>0) {
+              lv_obj_clean(tab_open_file);
+            } */
+            
+            /*Add content to the tabs*/
+            tab_open_file = lv_tabview_add_tab(tab_main_view, sel_fn);
+        
+            // TODO: Check how to set last Tab as active
+            lv_tabview_set_active(tab_main_view, lv_tabview_get_tab_count(tab_main_view), LV_ANIM_OFF);
+            printf("PATH to open: %s\n\n", file_open);
+            const char * file_content = lv_read_file(file_open);
+            printf("\n\n%s", file_content);
+            /* Create the text area */
+            lv_obj_t * ta = lv_textarea_create(tab_open_file);
+            lv_obj_set_width(ta, 1000);
+            lv_obj_set_height(ta, 700);
+            lv_textarea_set_text(ta, file_content);
+        }
+        
     }
 }
 
-void lv_example_file_explorer(void)
+void lv_example_file_explorer(lv_obj_t * tab)
 {
-    lv_obj_t * file_explorer = lv_file_explorer_create(lv_screen_active());
+    fs_init();
+    lv_obj_t * file_explorer = lv_file_explorer_create(tab);
     lv_file_explorer_set_sort(file_explorer, LV_EXPLORER_SORT_KIND);
+    lv_file_explorer_open_dir(file_explorer, "/S");
+
+    lv_obj_add_event_cb(file_explorer, file_explorer_event_handler, LV_EVENT_ALL, NULL);
 }
 
-bool fl_status = false;
-
-static void event_handler_on(lv_event_t * e)
-{
+/***
+ * Switch event - updates PWM duty
+ **/
+static void switch_event_handler(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
-    int led_duty = 0;
-    
+    lv_obj_t * obj = (lv_obj_t*) lv_event_get_target(e);
     if(code == LV_EVENT_VALUE_CHANGED) {
-        fl_status = !fl_status;
-        int duty = (fl_status) ? 90 : 0;
-        led_duty = duty * led_duty_multiplier;
-        lv_slider_set_value(slider, duty, LV_ANIM_ON);
-        char buf[8];
-        lv_snprintf(buf, sizeof(buf), "%d%%", duty);
-        lv_label_set_text(slider_label, buf);
+        LV_UNUSED(obj);
+        bool slider_state = lv_obj_has_state(obj, LV_STATE_CHECKED);
+        LV_LOG_USER("State: %s\n", slider_state ? "On" : "Off");
 
-        //printf("code: %d\n", (int)code);
+        lv_label_set_text(switch_label, slider_state ? "ON" : "OFF");
+
+        int led_duty = (int)slider_state * led_duty_multiplier * 1000;
         ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, led_duty);
         ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
     }
@@ -241,28 +289,31 @@ static void event_handler_on(lv_event_t * e)
  */
 void create_demo_application(void)
 {
-    /*Create a slider in the center of the display*/
-    slider = lv_slider_create(lv_scr_act());
-    lv_obj_center(slider);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    /* Create a Tab view object (global) */
+    tab_main_view = lv_tabview_create(lv_scr_act());
+    lv_obj_set_scrollbar_mode(lv_scr_act(), LV_SCROLLBAR_MODE_OFF);
 
-    /*Create a label below the slider*/
-    slider_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(slider_label, "0%");
-    lv_obj_align(slider, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align_to(slider_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+    /* Add 2 tabs (the tabs are page (lv_page) and can be scrolled*/
+    tab_main = lv_tabview_add_tab(tab_main_view, "SD Explorer");
+    tab_settings = lv_tabview_add_tab(tab_main_view, "Settings");
+    lv_obj_remove_flag(tab_settings, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t * label;
-    lv_obj_t * btn2 = lv_btn_create(lv_scr_act());
-    lv_obj_add_event_cb(btn2, event_handler_on, LV_EVENT_ALL, NULL);
-    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 120);
-    lv_obj_add_flag(btn2, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_height(btn2, LV_SIZE_CONTENT);
+    lv_obj_t * sw;
+    sw = lv_switch_create(tab_settings);
+    lv_obj_set_flex_flow(tab_settings, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    label = lv_label_create(btn2);
-    lv_label_set_text(label, "Toggle ON/OFF");
-    lv_obj_center(label);
-    //lv_example_file_explorer();
+    switch_label = lv_label_create(tab_settings);
+    lv_label_set_text(switch_label, "LED ON");
+
+    lv_obj_t * cb;
+    cb = lv_checkbox_create(tab_settings);
+    lv_checkbox_set_text(cb, "ON");
+
+    lv_obj_add_event_cb(sw, switch_event_handler, LV_EVENT_ALL, NULL);
+    lv_obj_add_flag(sw, LV_OBJ_FLAG_EVENT_BUBBLE);
+    
+    lv_example_file_explorer(tab_main);
 }
 
 static void lv_tick_task(void *arg) {
